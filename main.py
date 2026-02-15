@@ -39,14 +39,147 @@ CANONICAL_TRANSACTION_SCHEMA = {
     "manual_override": False,
     "processed_at": None,
     "error": None,
+    "content_fingerprint": "",
+    "invoice_key": None,
+    "duplicate_detected": False,
+    "duplicate_reason": None,
+    "duplicate_of": None,
 }
 
 REQUIRED_TRANSACTION_KEYS = set(CANONICAL_TRANSACTION_SCHEMA.keys())
+seen_content_fingerprints: set[str] = set()
+seen_invoice_keys: set[str] = set()
 
 
 def hash_text(text: str) -> str:
     """Generate SHA256 hash of text for deduplication."""
     return f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]}"
+
+
+def normalize_for_fingerprint(text: str) -> str:
+    """
+    Normalize text for stable fingerprinting across OCR variations.
+
+    Uses conservative normalization to avoid false positives.
+    """
+    text = (text or "").lower()
+    text = re.sub(r"[^\w\s]", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    text = text.strip()
+    return text[:50000]
+
+
+def compute_content_fingerprint(text: str) -> str:
+    """
+    Compute SHA-256 hash of normalized text.
+
+    Format: "sha256:<16_hex_chars>"
+    """
+    normalized = normalize_for_fingerprint(text)
+    hash_full = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    return f"sha256:{hash_full[:16]}"
+
+
+def load_ledger_index(ledger_path: str) -> tuple[set[str], set[str]]:
+    """
+    Build in-memory index of seen fingerprints and invoice keys.
+
+    Returns (seen_content_fingerprints, seen_invoice_keys).
+    """
+    seen_fingerprints: set[str] = set()
+    seen_keys: set[str] = set()
+    if not os.path.exists(ledger_path):
+        return seen_fingerprints, seen_keys
+    with open(ledger_path, "r", encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            fingerprint = record.get("content_fingerprint")
+            if fingerprint:
+                seen_fingerprints.add(fingerprint)
+            invoice_key = record.get("invoice_key")
+            if invoice_key:
+                seen_keys.add(invoice_key)
+    return seen_fingerprints, seen_keys
+
+
+def norm_identifier(s: str) -> str:
+    """Normalize account/invoice identifiers for stable key generation."""
+    if not s:
+        return ""
+    normalized = s.lower().strip()
+    normalized = re.sub(r"[-_/\s]", "", normalized)
+    normalized = re.sub(r"[^\w]", "", normalized)
+    return normalized
+
+
+def norm_date(date_str: str) -> str:
+    """Conservatively normalize dates for key generation."""
+    if not date_str:
+        return ""
+    return date_str.strip()
+
+
+def amount_to_cents(amount: float) -> str:
+    """Convert amount to integer cents string for stable keying."""
+    if amount is None:
+        return "0"
+    cents = int(round(amount * 100))
+    return str(cents)
+
+
+def norm_address(address: str) -> str:
+    """Normalize service address for key generation."""
+    if not address:
+        return ""
+    normalized = address.lower().strip()
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = re.sub(r"[,.]", "", normalized)
+    return normalized
+
+
+def compute_invoice_key(
+    vendor_key: str | None, parsed_invoice: dict | None
+) -> str | None:
+    """
+    Compute deterministic invoice key from structured fields.
+
+    Tier A: vendor + account + invoice number
+    Tier B: vendor + account + date + amount
+    Tier C: vendor + address + date + amount
+    """
+    if not vendor_key or not parsed_invoice:
+        return None
+    account_number = parsed_invoice.get("account_number")
+    invoice_number = parsed_invoice.get("invoice_number")
+    invoice_date = parsed_invoice.get("invoice_date")
+    total_amount = parsed_invoice.get("total_amount")
+    service_address = parsed_invoice.get("service_address")
+    if account_number and invoice_number:
+        return (
+            f"{vendor_key}|"
+            f"acct:{norm_identifier(account_number)}|"
+            f"inv:{norm_identifier(invoice_number)}"
+        )
+    if account_number and invoice_date and total_amount is not None:
+        return (
+            f"{vendor_key}|"
+            f"acct:{norm_identifier(account_number)}|"
+            f"date:{norm_date(invoice_date)}|"
+            f"amt_cents:{amount_to_cents(total_amount)}"
+        )
+    if service_address and invoice_date and total_amount is not None:
+        return (
+            f"{vendor_key}|"
+            f"addr:{norm_address(service_address)}|"
+            f"date:{norm_date(invoice_date)}|"
+            f"amt_cents:{amount_to_cents(total_amount)}"
+        )
+    return None
 
 
 def update_jsonl_record(filepath: str, updated_record: dict) -> None:
@@ -191,11 +324,12 @@ def append_manual_review_queue(
 def create_transaction_record(
     doc_id: str,
     vision_text: str,
+    content_fingerprint: str,
     farm_tag_result: TagResult | None = None,
     parsed_invoice: dict | None = None,
+    vendor_key: str | None = None,
     error: str | None = None,
     manual_override: bool = False,
-    farms_config: dict | None = None,
 ) -> dict:
     """
     Create unified transaction record with complete canonical schema.
@@ -207,6 +341,10 @@ def create_transaction_record(
     record["processed_at"] = datetime.datetime.now(datetime.UTC).isoformat()
     record["error"] = error
     record["manual_override"] = manual_override
+    record["content_fingerprint"] = content_fingerprint
+    record["duplicate_detected"] = False
+    record["duplicate_reason"] = None
+    record["duplicate_of"] = None
 
     if farm_tag_result and farm_tag_result.top_candidate:
         record["farm_id"] = farm_tag_result.top_candidate.farm_id
@@ -226,11 +364,43 @@ def create_transaction_record(
         record["service_address"] = parsed_invoice.get("service_address")
         record["account_number"] = parsed_invoice.get("account_number")
         record["line_items"] = parsed_invoice.get("line_items") or []
-        if record["farm_id"] and record["vendor_name"] and farms_config:
-            record["vendor_key"] = resolve_vendor_key(
-                record["farm_id"], record["vendor_name"], farms_config
-            )
+        record["invoice_key"] = compute_invoice_key(vendor_key, parsed_invoice)
+    else:
+        record["invoice_key"] = None
 
+    record["vendor_key"] = vendor_key
+
+    return record
+
+
+def create_duplicate_stub_record(
+    doc_id: str,
+    content_fingerprint: str,
+    farm_tag_result: TagResult,
+    parsed_invoice: dict,
+    vendor_key: str | None,
+    invoice_key: str,
+) -> dict:
+    """
+    Create a complete canonical audit stub for Layer 2 duplicate detections.
+    """
+    record = copy.deepcopy(CANONICAL_TRANSACTION_SCHEMA)
+    record["doc_id"] = doc_id
+    record["processed_at"] = datetime.datetime.now(datetime.UTC).isoformat()
+    record["content_fingerprint"] = content_fingerprint
+    record["invoice_key"] = invoice_key
+    record["duplicate_detected"] = True
+    record["duplicate_reason"] = "invoice_key"
+    record["duplicate_of"] = invoice_key
+    record["vendor_key"] = vendor_key
+    record["vendor_name"] = (parsed_invoice or {}).get("vendor_name")
+    record["needs_manual_review"] = False
+    record["manual_override"] = False
+    record["error"] = None
+    if farm_tag_result and farm_tag_result.top_candidate:
+        record["farm_id"] = farm_tag_result.top_candidate.farm_id
+        record["farm_name"] = farm_tag_result.top_candidate.farm_name
+        record["confidence"] = farm_tag_result.confidence
     return record
 
 
@@ -287,6 +457,7 @@ def process_single_invoice(
     doc_id = os.path.basename(pdf_path)
     api_key = config.get("openai_api_key") or config.get("OPENAI_API_KEY", "")
     tx_path = os.path.join(outputs_dir, "transactions.jsonl")
+    content_fingerprint = compute_content_fingerprint("")
 
     if not silent:
         print(f"\n[{doc_id}]", end=" ")
@@ -297,6 +468,7 @@ def process_single_invoice(
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text="",
+            content_fingerprint=content_fingerprint,
             error=f"path_validation: {e}",
         )
         append_jsonl(tx_path, record)
@@ -310,6 +482,7 @@ def process_single_invoice(
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text="",
+            content_fingerprint=content_fingerprint,
             error=f"vision_extraction_failed: {e}",
         )
         append_jsonl(tx_path, record)
@@ -321,6 +494,7 @@ def process_single_invoice(
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text="",
+            content_fingerprint=content_fingerprint,
             error="empty_vision_extraction",
         )
         append_jsonl(tx_path, record)
@@ -329,6 +503,13 @@ def process_single_invoice(
         return {"status": "failed", "reason": "empty_extraction", "confidence": 0.0}
 
     vision_text = vision_text.strip()
+    content_fingerprint = compute_content_fingerprint(vision_text)
+    global seen_content_fingerprints
+    if content_fingerprint in seen_content_fingerprints:
+        if not silent:
+            print("status=skipped_duplicate reason=content_fingerprint")
+        return {"status": "skipped_duplicate", "reason": "content_fingerprint"}
+    seen_content_fingerprints.add(content_fingerprint)
 
     try:
         tag_result = tag_document_text(vision_text, farms_config)
@@ -336,6 +517,7 @@ def process_single_invoice(
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text=vision_text,
+            content_fingerprint=content_fingerprint,
             error=f"farm_tagging_failed: {e}",
         )
         append_jsonl(tx_path, record)
@@ -350,9 +532,10 @@ def process_single_invoice(
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text=vision_text,
+            content_fingerprint=content_fingerprint,
             farm_tag_result=tag_result,
             parsed_invoice=None,
-            farms_config=farms_config,
+            vendor_key=None,
         )
         append_jsonl(tx_path, record)
         if not silent:
@@ -367,10 +550,11 @@ def process_single_invoice(
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text=vision_text,
+            content_fingerprint=content_fingerprint,
             farm_tag_result=tag_result,
             parsed_invoice=None,
+            vendor_key=None,
             error=f"llm_parsing_failed: {e}",
-            farms_config=farms_config,
         )
         append_jsonl(tx_path, record)
         if not silent:
@@ -380,22 +564,56 @@ def process_single_invoice(
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text=vision_text,
+            content_fingerprint=content_fingerprint,
             farm_tag_result=tag_result,
             parsed_invoice=None,
+            vendor_key=None,
             error=f"validation_failed: {e}",
-            farms_config=farms_config,
         )
         append_jsonl(tx_path, record)
         if not silent:
             print(f"status=failed confidence={tag_result.confidence:.2f} farm=None")
         return {"status": "failed", "reason": "validation_failed", "confidence": tag_result.confidence}
 
+    vendor_key = resolve_vendor_key(
+        tag_result.top_candidate.farm_id,
+        invoice_data.get("vendor_name"),
+        farms_config,
+    )
+    invoice_key = compute_invoice_key(vendor_key, invoice_data)
+    global seen_invoice_keys
+    if invoice_key and invoice_key in seen_invoice_keys:
+        stub_record = create_duplicate_stub_record(
+            doc_id=doc_id,
+            content_fingerprint=content_fingerprint,
+            farm_tag_result=tag_result,
+            parsed_invoice=invoice_data,
+            vendor_key=vendor_key,
+            invoice_key=invoice_key,
+        )
+        append_jsonl(tx_path, stub_record)
+        if not silent:
+            farm_label = (tag_result.top_candidate.farm_id or "UNKNOWN").upper()
+            print(
+                f"status=skipped_duplicate reason=invoice_key "
+                f"confidence={tag_result.confidence:.2f} farm={farm_label}"
+            )
+        return {
+            "status": "skipped_duplicate",
+            "reason": "invoice_key",
+            "confidence": tag_result.confidence,
+            "transaction": stub_record,
+        }
+    if invoice_key:
+        seen_invoice_keys.add(invoice_key)
+
     record = create_transaction_record(
         doc_id=doc_id,
         vision_text=vision_text,
+        content_fingerprint=content_fingerprint,
         farm_tag_result=tag_result,
         parsed_invoice=invoice_data,
-        farms_config=farms_config,
+        vendor_key=vendor_key,
     )
     append_jsonl(tx_path, record)
 
@@ -437,6 +655,7 @@ def process_batch(
     total = len(pdf_files)
     auto_processed = 0
     manual_review = 0
+    skipped_duplicates = 0
     failed = 0
 
     print("Processing all PDFs in invoices/...\n")
@@ -447,6 +666,7 @@ def process_batch(
             "total": 0,
             "auto_processed": 0,
             "manual_review": 0,
+            "skipped_duplicates": 0,
             "failed": 0,
             "transactions_recorded": 0,
             "review_queue": 0,
@@ -469,6 +689,7 @@ def process_batch(
             record = create_transaction_record(
                 doc_id=doc_id,
                 vision_text="",
+                content_fingerprint=compute_content_fingerprint(""),
                 error=f"unexpected_error: {e}",
             )
             append_jsonl(os.path.join(outputs_dir, "transactions.jsonl"), record)
@@ -490,6 +711,20 @@ def process_batch(
             if result.get("transaction") and result["transaction"].get("farm_id"):
                 farm_label = (result["transaction"]["farm_id"] or "None").upper()
             print(f"  status=manual confidence={conf:.2f} farm={farm_label}")
+        elif status == "skipped_duplicate":
+            skipped_duplicates += 1
+            reason = result.get("reason", "unknown")
+            farm_label = "None"
+            tx = result.get("transaction")
+            if tx and tx.get("farm_id"):
+                farm_label = (tx["farm_id"] or "None").upper()
+            if reason == "invoice_key":
+                print(
+                    f"  status=skipped_duplicate reason=invoice_key "
+                    f"confidence={conf:.2f} farm={farm_label}"
+                )
+            else:
+                print("  status=skipped_duplicate reason=content_fingerprint")
         else:
             failed += 1
             print(f"  status=failed confidence={conf:.2f} farm=None")
@@ -503,6 +738,7 @@ def process_batch(
     print(f"Total files: {total}")
     print(f"Auto-processed: {auto_processed}")
     print(f"Manual review: {manual_review}")
+    print(f"Skipped duplicates: {skipped_duplicates}")
     print(f"Failed: {failed}")
     print("=====================================")
     print(f"Transactions recorded: {transactions_recorded}")
@@ -514,6 +750,7 @@ def process_batch(
         "total": total,
         "auto_processed": auto_processed,
         "manual_review": manual_review,
+        "skipped_duplicates": skipped_duplicates,
         "failed": failed,
         "transactions_recorded": transactions_recorded,
         "review_queue": review_queue,
@@ -553,6 +790,11 @@ def main() -> None:
     except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
         print(f"Farms config error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    global seen_content_fingerprints, seen_invoice_keys
+    seen_content_fingerprints, seen_invoice_keys = load_ledger_index(
+        os.path.join(outputs_dir, "transactions.jsonl")
+    )
 
     if args.all:
         process_batch("invoices", config, script_dir, farms_config)
