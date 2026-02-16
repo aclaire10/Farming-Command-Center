@@ -12,6 +12,7 @@ import sys
 
 from config import load_config
 from farm_tagger import TagResult, load_farms, tag_document_text
+from rules import apply_dynamic_rules, load_dynamic_rules
 from llm_parser import (
     LLMParseError,
     extract_invoice_text_with_vision,
@@ -448,6 +449,7 @@ def process_single_invoice(
     script_dir: str,
     farms_config: dict,
     outputs_dir: str,
+    dynamic_rules_config: dict | None = None,
     silent: bool = False,
 ) -> dict:
     """
@@ -512,7 +514,10 @@ def process_single_invoice(
     seen_content_fingerprints.add(content_fingerprint)
 
     try:
-        tag_result = tag_document_text(vision_text, farms_config)
+        dynamic_rules = (dynamic_rules_config or {}).get("rules") or []
+        tag_result = apply_dynamic_rules(vision_text, dynamic_rules, farms_config)
+        if tag_result is None:
+            tag_result = tag_document_text(vision_text, farms_config)
     except Exception as e:
         record = create_transaction_record(
             doc_id=doc_id,
@@ -643,6 +648,7 @@ def process_batch(
     config: dict,
     script_dir: str,
     farms_config: dict,
+    dynamic_rules_config: dict | None = None,
 ) -> dict:
     """Process all PDFs in invoices directory with vision text and farm resolution."""
     outputs_dir = os.path.join(script_dir, "outputs")
@@ -681,7 +687,13 @@ def process_batch(
 
         try:
             result = process_single_invoice(
-                pdf_path, config, script_dir, farms_config, outputs_dir, silent=True
+                pdf_path,
+                config,
+                script_dir,
+                farms_config,
+                outputs_dir,
+                dynamic_rules_config=dynamic_rules_config,
+                silent=True,
             )
         except Exception as e:
             failed += 1
@@ -795,9 +807,21 @@ def main() -> None:
     seen_content_fingerprints, seen_invoice_keys = load_ledger_index(
         os.path.join(outputs_dir, "transactions.jsonl")
     )
+    dynamic_rules_path = os.path.join(script_dir, "config", "dynamic_rules.json")
+    try:
+        dynamic_rules_config = load_dynamic_rules(dynamic_rules_path)
+    except Exception as e:
+        print(f"Dynamic rules config error: {e}", file=sys.stderr)
+        sys.exit(1)
 
     if args.all:
-        process_batch("invoices", config, script_dir, farms_config)
+        process_batch(
+            "invoices",
+            config,
+            script_dir,
+            farms_config,
+            dynamic_rules_config=dynamic_rules_config,
+        )
         return
 
     if args.file is not None:
@@ -806,7 +830,13 @@ def main() -> None:
         pdf_path = os.path.join(script_dir, "invoices", "PGE_sample_invoice_10-9-25.pdf")
 
     result = process_single_invoice(
-        pdf_path, config, script_dir, farms_config, outputs_dir, silent=False
+        pdf_path,
+        config,
+        script_dir,
+        farms_config,
+        outputs_dir,
+        dynamic_rules_config=dynamic_rules_config,
+        silent=False,
     )
     status = result.get("status", "failed")
     if status == "failed":

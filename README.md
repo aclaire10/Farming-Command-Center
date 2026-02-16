@@ -47,6 +47,25 @@ Expected flow:
 3. **Validating output...** – Checks required fields and types.
 4. **Structured Output:** – Prints the validated JSON to the terminal.
 
+Batch mode:
+
+```bash
+python main.py --all
+```
+
+Manual review queue resolution:
+
+```bash
+python review_manual.py
+python review_manual.py --dry-run
+```
+
+Terminal dashboard:
+
+```bash
+python dashboard_terminal.py
+```
+
 ## Output schema
 
 The pipeline produces JSON in this shape:
@@ -64,6 +83,10 @@ Missing fields are set to `null`; the LLM does not guess values.
 - `llm_parser.py` – Markdown → JSON via OpenAI gpt-4o.
 - `validator.py` – Validates required fields and types.
 - `main.py` – Runs the pipeline and prints JSON.
+- `review_manual.py` – Interactive manual-review resolver and reinforcement-rule workflow.
+- `dashboard_terminal.py` – Terminal dashboard for farm and vendor spend views.
+- `ledger.py` – Safe JSON/JSONL I/O helpers with atomic rewrites.
+- `rules.py` – Dynamic rule matching and collision-safe reinforcement helpers.
 - `invoices/` – Place `sample_invoice.pdf` here.
 
 ## Error handling
@@ -73,6 +96,42 @@ Missing fields are set to `null`; the LLM does not guess values.
 - **OpenAI errors** – Network or API errors are caught and reported.
 - **Invalid JSON from LLM** – Raises a clear parse error.
 - **Validation failure** – Describes which required field or type failed.
+- **Ledger rewrite errors** – Atomic temp-file writes keep original ledgers unchanged on failure.
+
+## Stress Testing the System
+
+To test the system at scale:
+
+1. **Add PDFs in bulk:**
+   ```bash
+   cp /path/to/bulk/invoices/*.pdf invoices/
+   ```
+
+2. **Process all PDFs:**
+   ```bash
+   python main.py --all
+   ```
+   - Vision caching will speed up reruns
+   - Idempotency prevents duplicate ledger entries
+
+3. **Resolve manual review queue:**
+   ```bash
+   python review_manual.py
+   ```
+   - Create reinforcement rules to reduce future manual reviews
+
+4. **Rerun to see improvements:**
+   ```bash
+   python main.py --all
+   ```
+   - Dynamic rules should auto-assign previously ambiguous documents
+
+5. **Inspect results:**
+   ```bash
+   python dashboard_terminal.py
+   ```
+   - View totals by farm
+   - Verify no duplicates counted
 
 ## Scope (this version)
 
