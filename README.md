@@ -42,10 +42,10 @@ python main.py
 
 Expected flow:
 
-1. **Extracting PDF...** – Converts `invoices/sample_invoice.pdf` to markdown (pymupdf4llm).
-2. **Sending to LLM...** – Sends markdown to OpenAI (gpt-4o) and receives structured JSON.
-3. **Validating output...** – Checks required fields and types.
-4. **Structured Output:** – Prints the validated JSON to the terminal.
+1. **Vision OCR pass** – Extracts plain text once and caches in `outputs/vision_text_cache/`.
+2. **Deterministic farm tagging** – Resolves farm assignment (with dynamic-rule precheck).
+3. **Structured parsing from OCR text** – Parses invoice fields from cached OCR text (no second vision render).
+4. **Validation + ledger writes** – Validates fields and writes canonical JSONL records.
 
 Batch mode:
 
@@ -138,3 +138,14 @@ To test the system at scale:
 - No database, web framework, or UI.
 - No batch processing, auth, or analytics.
 - Single PDF path; modular and reusable for other vendor types.
+
+## Architecture Notes
+
+- Single OCR extraction pass feeds all downstream logic (tagging, structured parse, review).
+- Text-first parsing path supports scanned PDFs, digital PDFs, and future non-PDF channels
+  (email ingestion, QuickBooks imports, bank feeds, vendor portals) by reusing the same
+  normalized text-to-structure stage.
+- Structured parsing hardens JSON contract handling with output cleanup and one bounded retry
+  for malformed model responses.
+- Idempotency remains ledger-driven (`content_fingerprint`, `invoice_key`) and independent
+  from source channel, enabling clean future ML/reranking layers on top of deterministic records.

@@ -29,6 +29,15 @@ Total Amount Due by 07/28/2025 $30,802.03
 
 Electric Monthly Billing History
 
+$45000
+$33750
+$22500
+$11250
+$0
+7/12 8/12 9/11 10/10 11/08 12/11 1/10 2/10 3/14 4/15 5/09 6/12 7/11
+2024 2025
+Visit www.pge.com/MyEnergy for a detailed bill comparison
+
 Please return this portion with your payment. No staples or paper clips. Do not fold. Thank you.
 
 99907033048928000003080203080203
@@ -36,7 +45,7 @@ Please return this portion with your payment. No staples or paper clips. Do not 
 Account Number: 7033048928-0
 Due Date: 07/28/2025
 Total Amount Due: $30,802.03
-Amount Enclosed: $__________
+Amount Enclosed: $
 
 GOPURE FARMS LLC
 PO BOX 254487
@@ -67,14 +76,14 @@ Rules and rates
 You may be eligible for a lower rate. Find out about optional rates or view a complete list of rules and rates, visit www.pge.com or call 1-800-743-5000.
 If you believe there is an error on your bill, please call 1-800-743-5000 to speak with a representative. If you are not satisfied with our response, contact the California Public Utilities Commission (CPUC), Consumer Affairs Branch (CAB), 505 Van Ness Avenue, Room 2003, San Francisco, CA 94102, 1-800-649-7570 or 7-1-1 (8:30 AM to 4:30 PM, Monday-Friday) or by visiting www.cpuc.ca.gov/complaints/.
 To avoid having service turned off while you wait for the outcome of a complaint to the CPUC specifically regarding the accuracy of your bill, please contact CAB for assistance. If your case meets the eligibility criteria, CAB will provide you with instructions on how to mail a check or money order to be impounded pending resolution of your case. You must continue to pay your current charges while your complaint is under review to keep your service turned on.
-If you are not able to pay your bill, call PG&E to discuss how we can help. You may qualify for reduced rates under PG&E’s CARE program, and/or energy-saving assistance programs may be available to assist you. You may qualify for PG&E’s Energy Savings Assistance Program which is an energy efficiency program for income-qualified residential customers.
+If you are not able to pay your bill, call PG&E to discuss how we can help. You may qualify for reduced rates under PG&E’s CARE program or other income-qualified programs and agencies may be available to assist you. You may qualify for PG&E’s Energy Savings Assistance Program which is an energy efficiency program for income-qualified residential customers.
 
 Important definitions
 Operational charge: Many non-residential rates include a demand charge. Demand is a measurement of the highest usage of electricity in any single fifteen (or sometimes five) minute period during a monthly billing cycle. Demand is measured in kilowatts (or kW). High demand is usually associated with equipment start-up. By spreading equipment start-ups over a longer period of time, you may be able to lower demand and reduce your demand charges.
 Time-of-use electric prices are higher every day during afternoons and evenings, and lower at other times of the day. Prices also change by season, with higher prices in the summer and lower prices in the winter.
 Wildfire Fund Charge: Charge on behalf of the State of California Department of Water Resources (DWR) to fund the California Wildfire Fund. For usage prior to October 1, 2020, this charge included costs related to 2001 California energy crisis, also collected on behalf of the DWR. These charges belong to DWR, not PG&E.
 
-Power Charge Indifference Adjustment (PCIA): The PCIA is a charge to ensure that both PG&E customers and those who have left PG&E service to purchase electricity from other providers pay for the above market costs for electric generation resources that were procured by PG&E on their behalf. ‘Above market’ refers to the difference between what the utility pays for electric generation and current market prices for the sale of those resources. Visit www.pge.com/cca.
+Power Charge Indifference Adjustment (PCIA): The PCIA is a charge to ensure that both PG&E customers and those who have left PG&E service to purchase electricity from other providers pay for the above market costs for electric generation resources that were procured by PG&E on their behalf. “Above market” refers to the difference between what the utility pays for electric generation and current market prices for the sale of those resources. Visit www.pge.com/cca.
 
 Wildfire Hardening Charge: PG&E has been permitted to issue bonds that enable it to recover more quickly certain costs related to preventing and mitigating catastrophic wildfires, while reducing the total cost to its customers. Your bill for electric service includes a fixed recovery charge called the Wildfire Hardening Charge that has been approved by the CPUC to repay those bonds. The right to recover the Wildfire Hardening Charge has been transferred to a separate entity (called the Special Purpose Entity) that issued the bonds and does not belong to PG&E. PG&E is collecting the Wildfire Hardening Charge on behalf of the Special Purpose Entity. For details visit: www.pge.com/tariffs/assets/pdf/tariffbook/ELEC_PRELIM_JF.pdf.
 
@@ -120,7 +129,6 @@ Meter Number 1009848198
 Usage 12,725.136000 kWh
 Amount $3,821.43
 
-Service Agreement ID: 7032315410
 PIONEER COMMUNITY ENERGY Electric
 12,725.136000 kWh
 $2,094.25
@@ -128,13 +136,12 @@ $2,094.25
 Total $5,915.68
 
 Service For: 7101 PHILLIPS RD PUMP 16
-Service Agreement ID: 7034505088
+Service Agreement ID: 703405088
 PG&E Electric Delivery Charges
 1009917767
 9,647.814000 kWh
 $3,173.58
 
-Service Agreement ID: 7039863759
 PIONEER COMMUNITY ENERGY Electric
 9,647.814100 kWh
 $1,525.00
@@ -148,7 +155,6 @@ PG&E Electric Delivery Charges
 8,196.670000 kWh
 $2,836.06
 
-Service Agreement ID: 7034419805
 PIONEER COMMUNITY ENERGY Electric
 8,196.670000 kWh
 $1,288.77
@@ -156,13 +162,12 @@ $1,288.77
 Total $4,124.83
 
 Service For: 7101 PHILLIP RD PUMP 4
-Service Agreement ID: 7033462457
+Service Agreement ID: 703342457
 PG&E Electric Delivery Charges
 1009847500
 16,829.761000 kWh
 $4,741.79
 
-Service Agreement ID: 7033432380
 PIONEER COMMUNITY ENERGY Electric
 16,829.761000 kWh
 $2,766.71
@@ -176,7 +181,6 @@ PG&E Electric Delivery Charges
 9,620.362750 kWh
 $3,012.43
 
-Service Agreement ID: 7036366376
 PIONEER COMMUNITY ENERGY Electric
 9,620.362800 kWh
 $1,593.47

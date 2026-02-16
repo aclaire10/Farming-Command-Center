@@ -9,6 +9,7 @@ import json
 import os
 import re
 import sys
+import traceback
 
 from config import load_config
 from farm_tagger import TagResult, load_farms, tag_document_text
@@ -451,6 +452,7 @@ def process_single_invoice(
     outputs_dir: str,
     dynamic_rules_config: dict | None = None,
     silent: bool = False,
+    verbose: bool = False,
 ) -> dict:
     """
     Process single invoice: vision text (cached) -> farm resolution -> tag audit ->
@@ -467,6 +469,7 @@ def process_single_invoice(
     try:
         pdf_path = _resolve_and_validate_pdf_path(pdf_path, script_dir)
     except (FileNotFoundError, ValueError) as e:
+        _print_debug_exception("path_validation", e, doc_id, verbose)
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text="",
@@ -481,6 +484,7 @@ def process_single_invoice(
     try:
         vision_text = extract_invoice_text_with_vision(pdf_path, api_key, max_pages=3)
     except Exception as e:
+        _print_debug_exception("vision_extraction_failed", e, doc_id, verbose)
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text="",
@@ -519,6 +523,7 @@ def process_single_invoice(
         if tag_result is None:
             tag_result = tag_document_text(vision_text, farms_config)
     except Exception as e:
+        _print_debug_exception("farm_tagging_failed", e, doc_id, verbose)
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text=vision_text,
@@ -532,6 +537,26 @@ def process_single_invoice(
 
     append_tag_audit(doc_id, pdf_path, tag_result, outputs_dir)
 
+    invoice_data = None
+    parse_error = None
+    try:
+        invoice_data = parse_invoice_with_llm(vision_text, api_key)
+        validate_invoice(invoice_data)
+    except LLMParseError as e:
+        _print_debug_exception("llm_parsing_failed", e, doc_id, verbose)
+        parse_error = f"llm_parsing_failed: {e}"
+    except ValueError as e:
+        _print_debug_exception("validation_failed", e, doc_id, verbose)
+        parse_error = f"validation_failed: {e}"
+
+    vendor_key = None
+    if invoice_data and tag_result.top_candidate:
+        vendor_key = resolve_vendor_key(
+            tag_result.top_candidate.farm_id,
+            invoice_data.get("vendor_name"),
+            farms_config,
+        )
+
     if tag_result.needs_manual_review or tag_result.confidence < 0.85:
         append_manual_review_queue(doc_id, vision_text, tag_result, outputs_dir)
         record = create_transaction_record(
@@ -539,8 +564,9 @@ def process_single_invoice(
             vision_text=vision_text,
             content_fingerprint=content_fingerprint,
             farm_tag_result=tag_result,
-            parsed_invoice=None,
-            vendor_key=None,
+            parsed_invoice=invoice_data,
+            vendor_key=vendor_key,
+            error=parse_error,
         )
         append_jsonl(tx_path, record)
         if not silent:
@@ -548,10 +574,7 @@ def process_single_invoice(
             print(f"status=manual confidence={tag_result.confidence:.2f} farm={farm_label}")
         return {"status": "manual_review", "confidence": tag_result.confidence, "reason": tag_result.reason}
 
-    try:
-        invoice_data = parse_invoice_with_llm(pdf_path, api_key)
-        validate_invoice(invoice_data)
-    except LLMParseError as e:
+    if parse_error:
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text=vision_text,
@@ -559,32 +582,14 @@ def process_single_invoice(
             farm_tag_result=tag_result,
             parsed_invoice=None,
             vendor_key=None,
-            error=f"llm_parsing_failed: {e}",
+            error=parse_error,
         )
         append_jsonl(tx_path, record)
         if not silent:
             print(f"status=failed confidence={tag_result.confidence:.2f} farm=None")
-        return {"status": "failed", "reason": "llm_parsing_failed", "confidence": tag_result.confidence}
-    except ValueError as e:
-        record = create_transaction_record(
-            doc_id=doc_id,
-            vision_text=vision_text,
-            content_fingerprint=content_fingerprint,
-            farm_tag_result=tag_result,
-            parsed_invoice=None,
-            vendor_key=None,
-            error=f"validation_failed: {e}",
-        )
-        append_jsonl(tx_path, record)
-        if not silent:
-            print(f"status=failed confidence={tag_result.confidence:.2f} farm=None")
-        return {"status": "failed", "reason": "validation_failed", "confidence": tag_result.confidence}
+        reason = "llm_parsing_failed" if parse_error.startswith("llm_parsing_failed") else "validation_failed"
+        return {"status": "failed", "reason": reason, "confidence": tag_result.confidence}
 
-    vendor_key = resolve_vendor_key(
-        tag_result.top_candidate.farm_id,
-        invoice_data.get("vendor_name"),
-        farms_config,
-    )
     invoice_key = compute_invoice_key(vendor_key, invoice_data)
     global seen_invoice_keys
     if invoice_key and invoice_key in seen_invoice_keys:
@@ -649,6 +654,7 @@ def process_batch(
     script_dir: str,
     farms_config: dict,
     dynamic_rules_config: dict | None = None,
+    verbose: bool = False,
 ) -> dict:
     """Process all PDFs in invoices directory with vision text and farm resolution."""
     outputs_dir = os.path.join(script_dir, "outputs")
@@ -694,8 +700,10 @@ def process_batch(
                 outputs_dir,
                 dynamic_rules_config=dynamic_rules_config,
                 silent=True,
+                verbose=verbose,
             )
         except Exception as e:
+            _print_debug_exception("unexpected_error", e, os.path.basename(pdf_path), verbose)
             failed += 1
             doc_id = os.path.basename(pdf_path)
             record = create_transaction_record(
@@ -785,6 +793,11 @@ def main() -> None:
         action="store_true",
         help="Process all PDF files in the invoices/ directory",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print caught exceptions and full tracebacks for debugging.",
+    )
     args = parser.parse_args()
 
     try:
@@ -821,6 +834,7 @@ def main() -> None:
             script_dir,
             farms_config,
             dynamic_rules_config=dynamic_rules_config,
+            verbose=args.verbose,
         )
         return
 
@@ -837,6 +851,7 @@ def main() -> None:
         outputs_dir,
         dynamic_rules_config=dynamic_rules_config,
         silent=False,
+        verbose=args.verbose,
     )
     status = result.get("status", "failed")
     if status == "failed":
@@ -846,6 +861,17 @@ def main() -> None:
     if status == "success" and result.get("invoice_data") is not None:
         print("\nStructured Output:")
         print(json.dumps(result["invoice_data"], indent=2, ensure_ascii=False))
+
+
+def _print_debug_exception(stage: str, error: Exception, doc_id: str, verbose: bool) -> None:
+    """Print traceback details only when verbose debugging is enabled."""
+    if not verbose:
+        return
+    print(
+        f"\n[DEBUG] process_single_invoice doc_id={doc_id} stage={stage}: {error}",
+        file=sys.stderr,
+    )
+    traceback.print_exc()
 
 
 if __name__ == "__main__":

@@ -1,3 +1,4 @@
+```
 ENERGY STATEMENT
 www.pge.com/MyEnergy
 
@@ -31,7 +32,7 @@ Electric Monthly Billing History
 
 Please return this portion with your payment. No staples or paper clips. Do not fold. Thank you.
 
-9990703304892800000006860000686006
+9990703304892800000006806000006806
 
 Account Number: 7033048928-0
 Due Date: 09/29/2025
@@ -47,9 +48,9 @@ BOX 997300
 SACRAMENTO, CA 95899-7300
 
 Page 1 of 17
+```
 
----
-
+```
 ENERGY STATEMENT
 www.pge.com/MyEnergy
 
@@ -69,7 +70,7 @@ Rules and rates
 You may be eligible for a lower rate. Find out about optional rates or view a complete list of rules and rates, visit www.pge.com or call 1-800-743-5000.
 If you believe there is an error on your bill, please call 1-800-743-5000 to speak with a representative. If you are not satisfied with our response, contact the California Public Utilities Commission (CPUC), Consumer Affairs Branch (CAB), 505 Van Ness Avenue, Room 2003, San Francisco, CA 94102, 1-800-649-7570 or 7-1-1 (8:30 AM to 4:30 PM, Monday-Friday) or by visiting www.cpuc.ca.gov/complaints/.
 To avoid having service turned off while you wait for the outcome of a complaint to the CPUC specifically regarding the accuracy of your bill, please contact CAB for assistance. If your case meets the eligibility criteria, CAB will provide you with instructions on how to mail a check or money order to be impounded pending resolution of your case. You must continue to pay your current charges while your complaint is under review to keep your service turned on.
-If you are not able to pay your bill, call PG&E to discuss how we can help. You may qualify for reduced rates under PG&E’s CARE program, and/or energy-saving programs and agencies may be available to assist you. You may qualify for PG&E’s Energy Savings Assistance Program which is an energy efficiency program for income-qualified residential customers.
+If you are not able to pay your bill, call PG&E to discuss how we can help. You may qualify for reduced rates under PG&E’s CARE program or other special programs and agencies may be available to assist you. You may qualify for PG&E’s Energy Savings Assistance Program which is an energy efficiency program for income-qualified residential customers.
 
 Important definitions
 Operational charge: Many non-residential rates include a demand charge. Demand is a measurement of the highest usage of electricity in any single fifteen (or sometimes five) minute period during a monthly billing cycle. Demand is measured in kilowatts (or kW). High demand is usually associated with equipment start-up. By spreading equipment start-ups over a longer period of time, you may be able to lower demand and reduce your demand charges.
@@ -105,9 +106,9 @@ Ways To Pay
 • At a neighborhood payment center: To find a neighborhood payment center near you, please visit www.pge.com or call 800-743-5000. Please bring a copy of your bill with you.
 
 Page 2 of 17
+```
 
----
-
+```
 ENERGY STATEMENT
 www.pge.com/MyEnergy
 
@@ -117,7 +118,7 @@ Due Date: 09/29/2025
 
 Summary of your energy related services
 
-Service For: 7101 PHILLIP RD PUMP 6
+Service For: 7101 PHILLIPS RD PUMP 6
 Service Agreement ID: 703136250
 PG&E Electric Delivery Charges 1009848198 967.264000 kWh $1,085.86
 PIONEER COMMUNITY ENERGY Electric Generation Charges 967.264000 kWh $144.23
@@ -129,13 +130,13 @@ PG&E Electric Delivery Charges 1009917767 1,694.702000 kWh $1,273.05
 PIONEER COMMUNITY ENERGY Electric Generation Charges 1,694.702000 kWh $275.17
 Total $1,548.22
 
-Service For: 7101 PHILLIP RD PUMP 10
+Service For: 7101 PHILLIPS RD PUMP 10
 Service Agreement ID: 7039974378
 PG&E Electric Delivery Charges 1006474345 0.000000 kWh $27.47
 PIONEER COMMUNITY ENERGY Electric Generation Charges 0.000000 kWh $0.00
 Total $27.47
 
-Service For: 7101 PHILLIP RD PUMP 4
+Service For: 7101 PHILLIPS RD PUMP 4
 Service Agreement ID: 7033462457
 PG&E Electric Delivery Charges 1009847500 1,893.734000 kWh $1,299.98
 PIONEER COMMUNITY ENERGY Electric Generation Charges 1,893.734000 kWh $282.65
@@ -147,10 +148,11 @@ PG&E Electric Delivery Charges 1009994079 816.522000 kWh $928.97
 PIONEER COMMUNITY ENERGY Electric Generation Charges 816.522000 kWh $121.75
 Total $1,050.72
 
-Service For: 407 PHILLIP RD B
+Service For: 407 PHILLIPS RD B
 Service Agreement ID: 7037906641
 PG&E Electric Delivery Charges 1009983513 1,476.828000 kWh $1,182.87
 
 Visit www.pge.com/MyEnergy for a detailed bill comparison.
 
 Page 3 of 17
+```

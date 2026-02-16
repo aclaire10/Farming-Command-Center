@@ -1,7 +1,5 @@
 """
-Vision-based LLM invoice parsing using GPT-4o.
-Phase 1: Extract summary-level invoice fields only.
-Includes vision-based text extraction for farm tagging (works for all PDF types).
+LLM extraction helpers for OCR and structured invoice parsing.
 """
 
 import base64
@@ -27,6 +25,44 @@ Critical requirements:
 - Output plain text only - no markdown formatting, no explanations, no JSON
 
 Extract the text now:"""
+
+
+STRUCTURED_PARSE_SYSTEM_PROMPT = """
+You are a financial document extraction engine.
+
+You are given OCR text from a billing document. It may be utility bills, contractor invoices,
+vendor portal exports, email-forwarded invoices, QuickBooks exports, or bank feed attachments.
+
+Extract the following fields and return STRICT JSON only with this exact schema:
+{
+  "vendor_name": string | null,
+  "invoice_number": string | null,
+  "invoice_date": string | null,
+  "due_date": string | null,
+  "total_amount": float | null,
+  "service_address": string | null,
+  "account_number": string | null,
+  "line_items": []
+}
+
+Field rules:
+- Do not invent values. Use null when truly unavailable.
+- `line_items` must always be an empty array.
+- `total_amount` must be numeric (float/int) or null.
+- Prefer payable amount as `total_amount`:
+  1) BALANCE DUE / AMOUNT DUE
+  2) TOTAL DUE / CURRENT CHARGES
+  3) TOTAL
+- If both TOTAL and BALANCE DUE are present and BALANCE DUE is clearly payable now, use BALANCE DUE.
+- Recognize label variants (examples): INVOICE #, INVOICE NO, ACCOUNT NO, ACCT, STATEMENT DATE.
+- Return raw JSON only. No markdown, no comments, no extra keys.
+"""
+
+JSON_REPAIR_USER_INSTRUCTION = (
+    "Your previous response was not valid JSON. "
+    "Return ONLY one valid JSON object matching the required schema. "
+    "No markdown, no prose, no code fences."
+)
 
 
 def _render_pdf_pages_for_vision_text(pdf_path: str, max_pages: int = 3) -> List[str]:
@@ -95,94 +131,146 @@ def extract_invoice_text_with_vision(
     return vision_text
 
 
-def _render_pdf_pages_to_base64_images(pdf_path: str, max_pages: int = 3) -> List[str]:
+def parse_invoice_with_llm(ocr_text: str, api_key: str) -> Dict[str, Any]:
     """
-    Render first N pages of a PDF to base64-encoded PNG images.
+    Use GPT-4o text parsing to extract structured invoice summary fields from OCR text.
     """
-    doc = fitz.open(pdf_path)
-    images_base64 = []
-
-    for page_num in range(min(max_pages, len(doc))):
-        page = doc.load_page(page_num)
-        pix = page.get_pixmap(dpi=200)
-        img_bytes = pix.tobytes("png")
-        img_b64 = base64.b64encode(img_bytes).decode("utf-8")
-        images_base64.append(img_b64)
-
-    doc.close()
-    return images_base64
-
-
-def parse_invoice_with_llm(pdf_path: str, api_key: str) -> Dict[str, Any]:
-    """
-    Use GPT-4o vision to extract structured invoice summary fields.
-    """
-
+    if not (ocr_text or "").strip():
+        raise LLMParseError("OCR text is empty; cannot parse structured invoice fields.")
     client = OpenAI(api_key=api_key)
-
-    images_base64 = _render_pdf_pages_to_base64_images(pdf_path)
-
-    system_prompt = """
-You are a financial document extraction engine.
-
-Extract the following invoice summary fields from the provided invoice images.
-
-Return STRICT JSON only with this exact schema:
-
-{
-  "vendor_name": string | null,
-  "invoice_number": string | null,
-  "invoice_date": string | null,
-  "due_date": string | null,
-  "total_amount": float | null,
-  "service_address": string | null,
-  "account_number": string | null,
-  "line_items": []
-}
-
-Rules:
-- Do not guess values.
-- If a field is not clearly visible, return null.
-- total_amount must be numeric.
-- line_items must always be an empty array.
-- Return raw JSON only.
-- No markdown.
-- No explanation.
-"""
-
-    # Build multimodal message
-    content = [
-        {"type": "text", "text": "Extract structured invoice summary data."}
-    ]
-
-    for img_b64 in images_base64:
-        content.append(
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/png;base64,{img_b64}"
-                },
-            }
-        )
+    user_prompt = (
+        "Extract structured invoice summary data from this OCR text.\n\n"
+        f"OCR_TEXT:\n{ocr_text}"
+    )
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            temperature=0,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": content},
-            ],
-        )
-
-        raw_output = response.choices[0].message.content
-
+        raw_output = _request_structured_parse(client, user_prompt)
         try:
-            parsed = json.loads(raw_output)
-        except json.JSONDecodeError:
-            raise LLMParseError("Model returned invalid JSON.")
-
-        return parsed
+            parsed = _safe_parse_json(raw_output)
+        except LLMParseError:
+            repair_prompt = (
+                f"{JSON_REPAIR_USER_INSTRUCTION}\n\n"
+                f"OCR_TEXT:\n{ocr_text}\n\n"
+                f"PREVIOUS_RESPONSE_PREVIEW:\n{_preview_text(raw_output, limit=300)}"
+            )
+            retry_output = _request_structured_parse(client, repair_prompt)
+            parsed = _safe_parse_json(retry_output)
+        return _normalize_structured_invoice(parsed)
 
     except Exception as e:
         raise LLMParseError(str(e))
+
+
+def _request_structured_parse(client: OpenAI, user_prompt: str) -> str:
+    """Execute one structured parsing request and return raw model output."""
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        temperature=0,
+        messages=[
+            {"role": "system", "content": STRUCTURED_PARSE_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    return (response.choices[0].message.content or "").strip()
+
+
+def _safe_parse_json(raw_output: str) -> Dict[str, Any]:
+    """
+    Parse model output into a dict with recovery for common formatting wrappers.
+    """
+    if not (raw_output or "").strip():
+        raise LLMParseError(_format_parse_error("empty", raw_output, "Model returned empty response."))
+
+    cleaned = _strip_markdown_fences(raw_output.strip())
+    try:
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict):
+            raise LLMParseError(_format_parse_error("invalid-json", raw_output, "Top-level JSON must be an object."))
+        return parsed
+    except json.JSONDecodeError:
+        pass
+
+    extracted = _extract_json_object(cleaned)
+    if extracted is None:
+        raise LLMParseError(_format_parse_error("no-json", raw_output, "No JSON object found in model output."))
+    try:
+        parsed = json.loads(extracted)
+    except json.JSONDecodeError as exc:
+        raise LLMParseError(
+            _format_parse_error("invalid-json", raw_output, f"Invalid JSON after cleanup: {exc}")
+        ) from exc
+    if not isinstance(parsed, dict):
+        raise LLMParseError(_format_parse_error("invalid-json", raw_output, "Top-level JSON must be an object."))
+    return parsed
+
+
+def _strip_markdown_fences(text: str) -> str:
+    """Strip leading/trailing markdown code fences if present."""
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()
+    if not lines:
+        return text
+    if lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].strip().startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _extract_json_object(text: str) -> str | None:
+    """Extract substring spanning first '{' to last '}'."""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end < start:
+        return None
+    return text[start : end + 1].strip()
+
+
+def _format_parse_error(category: str, raw_output: str, detail: str) -> str:
+    """Return compact parser diagnostics with truncated model-output preview."""
+    preview = _preview_text(raw_output, limit=300)
+    return f"[{category}] {detail} preview='{preview}'"
+
+
+def _preview_text(text: str, limit: int = 300) -> str:
+    """Normalize and truncate preview text for diagnostics."""
+    compact = (text or "").replace("\r", "\\r").replace("\n", "\\n").strip()
+    if len(compact) <= limit:
+        return compact
+    return compact[:limit] + "...(truncated)"
+
+
+def _normalize_structured_invoice(parsed: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize model output to expected schema with stable key presence.
+    """
+    if not isinstance(parsed, dict):
+        raise LLMParseError("Model response is not a JSON object.")
+
+    normalized: Dict[str, Any] = {
+        "vendor_name": parsed.get("vendor_name"),
+        "invoice_number": parsed.get("invoice_number"),
+        "invoice_date": parsed.get("invoice_date"),
+        "due_date": parsed.get("due_date"),
+        "total_amount": parsed.get("total_amount"),
+        "service_address": parsed.get("service_address"),
+        "account_number": parsed.get("account_number"),
+        "line_items": [],
+    }
+
+    amount = normalized.get("total_amount")
+    if amount is not None:
+        try:
+            normalized["total_amount"] = float(amount)
+        except (TypeError, ValueError):
+            normalized["total_amount"] = None
+
+    for key in ("vendor_name", "invoice_number", "invoice_date", "due_date", "service_address", "account_number"):
+        value = normalized.get(key)
+        if value is None:
+            continue
+        text_value = str(value).strip()
+        normalized[key] = text_value if text_value else None
+
+    return normalized
