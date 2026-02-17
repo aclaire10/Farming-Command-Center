@@ -1,4 +1,4 @@
-"""Centralized filesystem paths for persistent data and configs."""
+"""Centralized filesystem paths for SQLite-backed data and configs."""
 
 from pathlib import Path
 
@@ -6,10 +6,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 
 DATA_DIR = BASE_DIR / "data"
-LEDGER_PATH = DATA_DIR / "transactions.jsonl"
-QUEUE_PATH = DATA_DIR / "manual_review_queue.jsonl"
-DECISIONS_PATH = DATA_DIR / "manual_review_decisions.jsonl"
-TAGS_PATH = DATA_DIR / "tags.jsonl"
+LEDGER_DB_PATH = DATA_DIR / "ledger.db"
 
 CACHE_DIR = DATA_DIR / "cache"
 VISION_CACHE_DIR = CACHE_DIR / "vision_text"

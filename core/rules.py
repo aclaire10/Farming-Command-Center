@@ -7,8 +7,9 @@ import hashlib
 import re
 from typing import Any
 
+from core.db import execute
 from farm_tagger import TagCandidate, TagResult
-from ledger import append_jsonl, atomic_rewrite_json, read_json
+from core.ledger import atomic_rewrite_json, read_json
 
 DEFAULT_DYNAMIC_RULES = {"version": "1.0", "rules": []}
 
@@ -61,7 +62,32 @@ def ensure_dynamic_rules_file(path: str) -> dict[str, Any]:
 
 def append_manual_decision(path: str, decision: dict[str, Any]) -> None:
     """Append manual decision record in append-only mode."""
-    append_jsonl(path, decision)
+    _ = path
+    execute(
+        """
+        INSERT INTO manual_review_decisions (
+            doc_id,
+            content_fingerprint,
+            invoice_key,
+            selected_farm_key,
+            selected_farm_name,
+            decision_source,
+            notes,
+            created_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            decision.get("doc_id"),
+            decision.get("content_fingerprint"),
+            decision.get("invoice_key"),
+            decision.get("selected_farm_id"),
+            decision.get("selected_farm_name"),
+            decision.get("decision_source") or "manual_review",
+            decision.get("notes"),
+            decision.get("created_at") or datetime.datetime.now(datetime.UTC).isoformat(),
+        ),
+    )
 
 
 def upsert_dynamic_rule(

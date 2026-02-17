@@ -100,10 +100,10 @@ def extract_invoice_text_with_vision(
         with cache_path.open("r", encoding="utf-8") as f:
             cached_text = f.read()
         if cached_text.strip():
-            print("  → Using cached vision text")
+            print("  -> Using cached vision text")
             return cached_text
 
-    print("  → Extracting with GPT-4o vision")
+    print("  -> Extracting with GPT-4o vision")
     client = OpenAI(api_key=api_key)
     images_base64 = _render_pdf_pages_for_vision_text(pdf_path, max_pages=max_pages)
     if not images_base64:
