@@ -1,6 +1,6 @@
 """Extract markdown from PDF files using pymupdf4llm."""
 
-import os
+from pathlib import Path
 from typing import Optional
 
 import pymupdf
@@ -21,7 +21,7 @@ def extract_markdown_from_pdf(file_path: str) -> str:
     Raises:
         FileNotFoundError: If file_path does not exist.
     """
-    if not os.path.exists(file_path):
+    if not Path(file_path).exists():
         raise FileNotFoundError(f"PDF not found: {file_path}")
 
     doc: Optional[pymupdf.Document] = None

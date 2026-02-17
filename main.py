@@ -3,13 +3,12 @@
 import argparse
 import copy
 import datetime
-import glob
 import hashlib
 import json
-import os
 import re
 import sys
 import traceback
+from pathlib import Path
 
 from config import load_config
 from farm_tagger import TagResult, load_farms, tag_document_text
@@ -20,6 +19,17 @@ from llm_parser import (
     parse_invoice_with_llm,
 )
 from validator import validate_invoice
+from paths import (
+    BASE_DIR,
+    DYNAMIC_RULES_PATH,
+    FARMS_CONFIG_PATH,
+    INVOICES_DIR,
+    LEDGER_PATH,
+    QUEUE_PATH,
+    STRUCTURED_OUTPUTS_DIR,
+    TAGS_PATH,
+    ensure_data_dirs,
+)
 
 
 CANONICAL_TRANSACTION_SCHEMA = {
@@ -82,7 +92,7 @@ def compute_content_fingerprint(text: str) -> str:
     return f"sha256:{hash_full[:16]}"
 
 
-def load_ledger_index(ledger_path: str) -> tuple[set[str], set[str]]:
+def load_ledger_index(ledger_path: str | Path) -> tuple[set[str], set[str]]:
     """
     Build in-memory index of seen fingerprints and invoice keys.
 
@@ -90,9 +100,10 @@ def load_ledger_index(ledger_path: str) -> tuple[set[str], set[str]]:
     """
     seen_fingerprints: set[str] = set()
     seen_keys: set[str] = set()
-    if not os.path.exists(ledger_path):
+    ledger_file = Path(ledger_path)
+    if not ledger_file.exists():
         return seen_fingerprints, seen_keys
-    with open(ledger_path, "r", encoding="utf-8") as f:
+    with ledger_file.open("r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
                 continue
@@ -184,14 +195,15 @@ def compute_invoice_key(
     return None
 
 
-def update_jsonl_record(filepath: str, updated_record: dict) -> None:
+def update_jsonl_record(filepath: str | Path, updated_record: dict) -> None:
     """
     Update existing record in JSONL file by doc_id.
     Reads entire file, replaces matching record, rewrites file.
     """
+    file_path = Path(filepath)
     doc_id = updated_record["doc_id"]
     records = []
-    with open(filepath, "r", encoding="utf-8") as f:
+    with file_path.open("r", encoding="utf-8") as f:
         for line in f:
             if line.strip():
                 rec = json.loads(line)
@@ -199,18 +211,19 @@ def update_jsonl_record(filepath: str, updated_record: dict) -> None:
                     records.append(updated_record)
                 else:
                     records.append(rec)
-    with open(filepath, "w", encoding="utf-8") as f:
+    with file_path.open("w", encoding="utf-8") as f:
         for rec in records:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
-def append_jsonl(filepath: str, record: dict) -> None:
+def append_jsonl(filepath: str | Path, record: dict) -> None:
     """
     Append record to JSONL file with schema validation and duplicate prevention.
     For transactions.jsonl: validates schema, checks for duplicate doc_id,
     updates existing record instead of appending.
     """
-    if filepath.endswith("transactions.jsonl"):
+    file_path = Path(filepath)
+    if file_path.name == "transactions.jsonl":
         record_keys = set(record.keys())
         if record_keys != REQUIRED_TRANSACTION_KEYS:
             missing = REQUIRED_TRANSACTION_KEYS - record_keys
@@ -221,19 +234,18 @@ def append_jsonl(filepath: str, record: dict) -> None:
             if extra:
                 error_msg.append(f"Extra keys: {extra}")
             raise ValueError(f"Transaction record schema violation. {' '.join(error_msg)}")
-        if os.path.exists(filepath):
-            with open(filepath, "r", encoding="utf-8") as f:
+        if file_path.exists():
+            with file_path.open("r", encoding="utf-8") as f:
                 for line in f:
                     if line.strip():
                         existing = json.loads(line)
                         if existing.get("doc_id") == record.get("doc_id"):
                             print(f"  → Updating existing transaction for {record['doc_id']}")
-                            update_jsonl_record(filepath, record)
+                            update_jsonl_record(file_path, record)
                             return
-    d = os.path.dirname(filepath)
-    if d:
-        os.makedirs(d, exist_ok=True)
-    with open(filepath, "a", encoding="utf-8") as f:
+    if file_path.parent:
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+    with file_path.open("a", encoding="utf-8") as f:
         f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
@@ -261,9 +273,8 @@ def append_tag_audit(
     doc_id: str,
     pdf_path: str,
     tag_result: TagResult,
-    outputs_dir: str,
 ) -> None:
-    """Append tag audit record to outputs/tags.jsonl."""
+    """Append tag audit record."""
     top = tag_result.top_candidate
     record = {
         "doc_id": doc_id,
@@ -292,14 +303,13 @@ def append_tag_audit(
         "reason": tag_result.reason,
         "tagged_at": datetime.datetime.now(datetime.UTC).isoformat(),
     }
-    append_jsonl(os.path.join(outputs_dir, "tags.jsonl"), record)
+    append_jsonl(TAGS_PATH, record)
 
 
 def append_manual_review_queue(
     doc_id: str,
     vision_text: str,
     tag_result: TagResult,
-    outputs_dir: str,
 ) -> None:
     """Add document to manual review queue with rich context."""
     preview = vision_text[:500] + ("..." if len(vision_text) > 500 else "")
@@ -320,7 +330,7 @@ def append_manual_review_queue(
         "queued_at": datetime.datetime.now(datetime.UTC).isoformat(),
         "resolved": False,
     }
-    append_jsonl(os.path.join(outputs_dir, "manual_review_queue.jsonl"), record)
+    append_jsonl(QUEUE_PATH, record)
 
 
 def create_transaction_record(
@@ -409,47 +419,49 @@ def create_duplicate_stub_record(
 def save_invoice_to_json(
     invoice_data: dict,
     pdf_path: str,
-    outputs_dir: str,
+    outputs_dir: str | Path,
 ) -> str:
     """Save validated invoice data to a JSON file."""
-    os.makedirs(outputs_dir, exist_ok=True)
-    base = os.path.basename(pdf_path)
-    name_without_ext, _ = os.path.splitext(base)
+    output_dir = Path(outputs_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    base = Path(pdf_path).name
+    name_without_ext = Path(base).stem
     json_filename = name_without_ext + ".json"
-    out_path = os.path.join(outputs_dir, json_filename)
+    out_path = output_dir / json_filename
     json_str = json.dumps(invoice_data, indent=2, ensure_ascii=False)
-    tmp_path = out_path + ".tmp"
+    tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
     try:
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        with tmp_path.open("w", encoding="utf-8") as f:
             f.write(json_str)
-        os.replace(tmp_path, out_path)
+        tmp_path.replace(out_path)
     except OSError:
-        if os.path.exists(tmp_path):
+        if tmp_path.exists():
             try:
-                os.remove(tmp_path)
+                tmp_path.unlink()
             except OSError:
                 pass
         raise
-    return out_path
+    return str(out_path)
 
 
-def _resolve_and_validate_pdf_path(pdf_path: str, script_dir: str) -> str:
+def _resolve_and_validate_pdf_path(pdf_path: str, script_dir: str | Path) -> str:
     """Resolve relative path from script_dir and validate file exists and is PDF."""
-    if not os.path.isabs(pdf_path):
-        pdf_path = os.path.normpath(os.path.join(script_dir, pdf_path))
-    if not os.path.exists(pdf_path):
-        raise FileNotFoundError(f"File not found: {pdf_path}")
-    if not pdf_path.lower().endswith(".pdf"):
-        raise ValueError(f"File must be a PDF: {pdf_path}")
-    return pdf_path
+    candidate = Path(pdf_path)
+    if not candidate.is_absolute():
+        candidate = (Path(script_dir) / candidate).resolve()
+    if not candidate.exists():
+        raise FileNotFoundError(f"File not found: {candidate}")
+    if candidate.suffix.lower() != ".pdf":
+        raise ValueError(f"File must be a PDF: {candidate}")
+    return str(candidate)
 
 
 def process_single_invoice(
     pdf_path: str,
     config: dict,
-    script_dir: str,
+    script_dir: str | Path,
     farms_config: dict,
-    outputs_dir: str,
+    outputs_dir: str | Path,
     dynamic_rules_config: dict | None = None,
     silent: bool = False,
     verbose: bool = False,
@@ -458,9 +470,9 @@ def process_single_invoice(
     Process single invoice: vision text (cached) -> farm resolution -> tag audit ->
     conditional parse -> unified transaction record. All paths use create_transaction_record.
     """
-    doc_id = os.path.basename(pdf_path)
+    doc_id = Path(pdf_path).name
     api_key = config.get("openai_api_key") or config.get("OPENAI_API_KEY", "")
-    tx_path = os.path.join(outputs_dir, "transactions.jsonl")
+    tx_path = LEDGER_PATH
     content_fingerprint = compute_content_fingerprint("")
 
     if not silent:
@@ -535,7 +547,7 @@ def process_single_invoice(
             print(f"status=failed confidence=0.00 farm=None")
         return {"status": "failed", "reason": "farm_tagging_failed", "confidence": 0.0}
 
-    append_tag_audit(doc_id, pdf_path, tag_result, outputs_dir)
+    append_tag_audit(doc_id, pdf_path, tag_result)
 
     invoice_data = None
     parse_error = None
@@ -558,7 +570,7 @@ def process_single_invoice(
         )
 
     if tag_result.needs_manual_review or tag_result.confidence < 0.85:
-        append_manual_review_queue(doc_id, vision_text, tag_result, outputs_dir)
+        append_manual_review_queue(doc_id, vision_text, tag_result)
         record = create_transaction_record(
             doc_id=doc_id,
             vision_text=vision_text,
@@ -637,7 +649,7 @@ def process_single_invoice(
         farm_label = (tag_result.top_candidate.farm_id or "UNKNOWN").upper()
         print(f"status=auto confidence={tag_result.confidence:.2f} farm={farm_label}")
     if not silent and saved_path:
-        print(f"  ✓ Saved to outputs/{os.path.basename(saved_path)}")
+        print(f"  ✓ Saved to {Path(saved_path).name}")
 
     return {
         "status": "success",
@@ -651,18 +663,18 @@ def process_single_invoice(
 def process_batch(
     invoices_dir: str,
     config: dict,
-    script_dir: str,
+    script_dir: str | Path,
     farms_config: dict,
     dynamic_rules_config: dict | None = None,
     verbose: bool = False,
 ) -> dict:
     """Process all PDFs in invoices directory with vision text and farm resolution."""
-    outputs_dir = os.path.join(script_dir, "outputs")
-    invoices_path = os.path.join(script_dir, invoices_dir)
-    if not os.path.isdir(invoices_path):
-        pdf_files = []
+    outputs_dir = STRUCTURED_OUTPUTS_DIR
+    invoices_path = Path(script_dir) / invoices_dir
+    if not invoices_path.is_dir():
+        pdf_files: list[Path] = []
     else:
-        pdf_files = sorted(glob.glob(os.path.join(invoices_path, "*.pdf")))
+        pdf_files = sorted(invoices_path.glob("*.pdf"))
 
     total = len(pdf_files)
     auto_processed = 0
@@ -686,9 +698,10 @@ def process_batch(
 
     for i, pdf_path in enumerate(pdf_files):
         one_indexed = i + 1
-        display_path = os.path.relpath(pdf_path, script_dir)
-        if os.path.sep != "/":
-            display_path = display_path.replace(os.path.sep, "/")
+        try:
+            display_path = pdf_path.relative_to(Path(script_dir)).as_posix()
+        except ValueError:
+            display_path = pdf_path.as_posix()
         print(f"[{one_indexed}/{total}] Processing: {display_path}")
 
         try:
@@ -703,16 +716,16 @@ def process_batch(
                 verbose=verbose,
             )
         except Exception as e:
-            _print_debug_exception("unexpected_error", e, os.path.basename(pdf_path), verbose)
+            _print_debug_exception("unexpected_error", e, pdf_path.name, verbose)
             failed += 1
-            doc_id = os.path.basename(pdf_path)
+            doc_id = pdf_path.name
             record = create_transaction_record(
                 doc_id=doc_id,
                 vision_text="",
                 content_fingerprint=compute_content_fingerprint(""),
                 error=f"unexpected_error: {e}",
             )
-            append_jsonl(os.path.join(outputs_dir, "transactions.jsonl"), record)
+            append_jsonl(LEDGER_PATH, record)
             print(f"  status=failed confidence=0.00 farm=None")
             continue
 
@@ -724,7 +737,7 @@ def process_batch(
             farm_label = (tx.get("farm_id") or "UNKNOWN").upper() if tx else "UNKNOWN"
             print(f"  status=auto confidence={conf:.2f} farm={farm_label}")
             if result.get("saved_path"):
-                print(f"  ✓ Saved to outputs/{os.path.basename(result['saved_path'])}")
+                print(f"  ✓ Saved to {Path(result['saved_path']).name}")
         elif status == "manual_review":
             manual_review += 1
             farm_label = "None"
@@ -764,7 +777,7 @@ def process_batch(
     print(f"Transactions recorded: {transactions_recorded}")
     print(f"Review queue: {review_queue}")
     print("=====================================")
-    print(f"\nLedger saved to: {os.path.join(outputs_dir, 'transactions.jsonl')}")
+    print(f"\nLedger saved to: {LEDGER_PATH}")
 
     return {
         "total": total,
@@ -779,6 +792,7 @@ def process_batch(
 
 def main() -> None:
     """Entry point with CLI argument parsing."""
+    ensure_data_dirs()
     parser = argparse.ArgumentParser(
         description="Farm Expense Command Center - Invoice Ingestion Pipeline"
     )
@@ -806,23 +820,16 @@ def main() -> None:
         print(f"Configuration error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    outputs_dir = os.path.join(script_dir, "outputs")
-
-    farms_config_path = os.path.join(script_dir, "config", "farms.json")
     try:
-        farms_config = load_farms(farms_config_path)
+        farms_config = load_farms(FARMS_CONFIG_PATH)
     except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
         print(f"Farms config error: {e}", file=sys.stderr)
         sys.exit(1)
 
     global seen_content_fingerprints, seen_invoice_keys
-    seen_content_fingerprints, seen_invoice_keys = load_ledger_index(
-        os.path.join(outputs_dir, "transactions.jsonl")
-    )
-    dynamic_rules_path = os.path.join(script_dir, "config", "dynamic_rules.json")
+    seen_content_fingerprints, seen_invoice_keys = load_ledger_index(LEDGER_PATH)
     try:
-        dynamic_rules_config = load_dynamic_rules(dynamic_rules_path)
+        dynamic_rules_config = load_dynamic_rules(DYNAMIC_RULES_PATH)
     except Exception as e:
         print(f"Dynamic rules config error: {e}", file=sys.stderr)
         sys.exit(1)
@@ -831,7 +838,7 @@ def main() -> None:
         process_batch(
             "invoices",
             config,
-            script_dir,
+            BASE_DIR,
             farms_config,
             dynamic_rules_config=dynamic_rules_config,
             verbose=args.verbose,
@@ -841,14 +848,14 @@ def main() -> None:
     if args.file is not None:
         pdf_path = args.file
     else:
-        pdf_path = os.path.join(script_dir, "invoices", "PGE_sample_invoice_10-9-25.pdf")
+        pdf_path = INVOICES_DIR / "PGE_sample_invoice_10-9-25.pdf"
 
     result = process_single_invoice(
         pdf_path,
         config,
-        script_dir,
+        BASE_DIR,
         farms_config,
-        outputs_dir,
+        STRUCTURED_OUTPUTS_DIR,
         dynamic_rules_config=dynamic_rules_config,
         silent=False,
         verbose=args.verbose,

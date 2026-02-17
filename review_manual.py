@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import datetime
-import os
 import re
 import sys
 from typing import Any
@@ -17,6 +16,15 @@ from rules import (
     generate_rule_id,
     normalize_text,
     upsert_dynamic_rule,
+)
+from paths import (
+    DECISIONS_PATH,
+    DYNAMIC_RULES_PATH,
+    FARMS_CONFIG_PATH,
+    QUEUE_PATH,
+    LEDGER_PATH,
+    VISION_CACHE_DIR,
+    ensure_data_dirs,
 )
 
 
@@ -34,19 +42,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    outputs_dir = os.path.join(script_dir, "outputs")
-    queue_path = os.path.join(outputs_dir, "manual_review_queue.jsonl")
-    decisions_path = os.path.join(outputs_dir, "manual_review_decisions.jsonl")
-    transactions_path = os.path.join(outputs_dir, "transactions.jsonl")
-    farms_path = os.path.join(script_dir, "config", "farms.json")
-    dynamic_rules_path = os.path.join(script_dir, "config", "dynamic_rules.json")
+    ensure_data_dirs()
 
     try:
-        farms_config = load_farms(farms_path)
-        queue_rows = read_jsonl(queue_path)
-        transactions_rows = read_jsonl(transactions_path)
-        dynamic_rules_payload = ensure_dynamic_rules_file(dynamic_rules_path)
+        farms_config = load_farms(FARMS_CONFIG_PATH)
+        queue_rows = read_jsonl(QUEUE_PATH)
+        transactions_rows = read_jsonl(LEDGER_PATH)
+        dynamic_rules_payload = ensure_dynamic_rules_file(DYNAMIC_RULES_PATH)
     except (FileNotFoundError, ValueError, LedgerIOError) as exc:
         print(f"Initialization failed: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -131,7 +133,6 @@ def main() -> None:
             farms_config=farms_config,
             dynamic_rules_payload=dynamic_rules_payload,
             transactions_rows=transactions_rows,
-            script_dir=script_dir,
         )
 
         accepted_rules: list[dict[str, Any]] = []
@@ -166,7 +167,7 @@ def main() -> None:
             resolved_count += 1
             continue
 
-        append_jsonl(decisions_path, decision)
+        append_jsonl(DECISIONS_PATH, decision)
         item["resolved"] = True
         queue_writes_needed = True
 
@@ -191,11 +192,11 @@ def main() -> None:
                 )
 
         for proposal in accepted_rules:
-            created, rule_id = upsert_dynamic_rule(dynamic_rules_path, proposal)
+            created, rule_id = upsert_dynamic_rule(DYNAMIC_RULES_PATH, proposal)
             if created:
                 accepted_rule_count += 1
                 print(f"Added dynamic rule: {rule_id}")
-                dynamic_rules_payload = ensure_dynamic_rules_file(dynamic_rules_path)
+                dynamic_rules_payload = ensure_dynamic_rules_file(DYNAMIC_RULES_PATH)
             else:
                 print(f"Rule already exists: {rule_id}")
 
@@ -210,9 +211,9 @@ def main() -> None:
 
     try:
         if queue_writes_needed:
-            atomic_rewrite_jsonl(queue_path, queue_rows)
+            atomic_rewrite_jsonl(QUEUE_PATH, queue_rows)
         if transaction_writes_needed:
-            atomic_rewrite_jsonl(transactions_path, transactions_rows)
+            atomic_rewrite_jsonl(LEDGER_PATH, transactions_rows)
     except LedgerIOError as exc:
         print(f"Write failed: {exc}", file=sys.stderr)
         sys.exit(1)
@@ -322,9 +323,8 @@ def propose_dynamic_rules(
     farms_config: dict[str, Any],
     dynamic_rules_payload: dict[str, Any],
     transactions_rows: list[dict[str, Any]],
-    script_dir: str,
 ) -> list[dict[str, Any]]:
-    ocr_text = load_cached_ocr_text(script_dir, doc_id)
+    ocr_text = load_cached_ocr_text(doc_id)
     vendor_key = transaction_row.get("vendor_key") or infer_vendor_key_from_text(
         ocr_text, farms_config
     )
@@ -389,11 +389,11 @@ def propose_dynamic_rules(
     return proposals[:3]
 
 
-def load_cached_ocr_text(script_dir: str, doc_id: str) -> str:
-    cache_path = os.path.join(script_dir, "outputs", "vision_text_cache", f"{doc_id}.txt")
-    if not os.path.exists(cache_path):
+def load_cached_ocr_text(doc_id: str) -> str:
+    cache_path = VISION_CACHE_DIR / f"{doc_id}.txt"
+    if not cache_path.exists():
         return ""
-    with open(cache_path, "r", encoding="utf-8") as handle:
+    with cache_path.open("r", encoding="utf-8") as handle:
         return handle.read()
 
 

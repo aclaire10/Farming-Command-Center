@@ -4,11 +4,12 @@ LLM extraction helpers for OCR and structured invoice parsing.
 
 import base64
 import json
-import os
+from pathlib import Path
 from typing import Dict, Any, List
 
 import fitz  # PyMuPDF
 from openai import OpenAI
+from paths import VISION_CACHE_DIR
 
 
 class LLMParseError(Exception):
@@ -88,16 +89,15 @@ def extract_invoice_text_with_vision(
     """
     Extract plain text from PDF using GPT-4o vision with caching.
 
-    Caching: keyed by filename; checks outputs/vision_text_cache/<filename>.txt
+    Caching: keyed by filename; checks canonical vision text cache by filename
     before any API call. Never caches empty strings.
     """
-    cache_dir = "outputs/vision_text_cache"
-    os.makedirs(cache_dir, exist_ok=True)
-    doc_id = os.path.basename(pdf_path)
-    cache_path = os.path.join(cache_dir, f"{doc_id}.txt")
+    VISION_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    doc_id = Path(pdf_path).name
+    cache_path = VISION_CACHE_DIR / f"{doc_id}.txt"
 
-    if os.path.exists(cache_path):
-        with open(cache_path, "r", encoding="utf-8") as f:
+    if cache_path.exists():
+        with cache_path.open("r", encoding="utf-8") as f:
             cached_text = f.read()
         if cached_text.strip():
             print("  → Using cached vision text")
@@ -126,7 +126,7 @@ def extract_invoice_text_with_vision(
     )
     vision_text = (response.choices[0].message.content or "").strip()
     if vision_text:
-        with open(cache_path, "w", encoding="utf-8") as f:
+        with cache_path.open("w", encoding="utf-8") as f:
             f.write(vision_text)
     return vision_text
 

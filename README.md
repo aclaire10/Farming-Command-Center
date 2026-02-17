@@ -42,7 +42,7 @@ python main.py
 
 Expected flow:
 
-1. **Vision OCR pass** – Extracts plain text once and caches in `outputs/vision_text_cache/`.
+1. **Vision OCR pass** – Extracts plain text once and caches in `data/cache/vision_text/`.
 2. **Deterministic farm tagging** – Resolves farm assignment (with dynamic-rule precheck).
 3. **Structured parsing from OCR text** – Parses invoice fields from cached OCR text (no second vision render).
 4. **Validation + ledger writes** – Validates fields and writes canonical JSONL records.

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +11,7 @@ class LedgerIOError(RuntimeError):
     """Raised when ledger read/write operations fail."""
 
 
-def read_jsonl(path: str) -> list[dict[str, Any]]:
+def read_jsonl(path: str | Path) -> list[dict[str, Any]]:
     """Read JSONL file into memory, skipping empty lines."""
     file_path = Path(path)
     if not file_path.exists():
@@ -39,7 +38,7 @@ def read_jsonl(path: str) -> list[dict[str, Any]]:
     return records
 
 
-def append_jsonl(path: str, record: dict[str, Any]) -> None:
+def append_jsonl(path: str | Path, record: dict[str, Any]) -> None:
     """Append one JSON record to JSONL file."""
     file_path = Path(path)
     if file_path.parent:
@@ -48,7 +47,7 @@ def append_jsonl(path: str, record: dict[str, Any]) -> None:
         handle.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
-def read_json(path: str, default: dict[str, Any] | None = None) -> dict[str, Any]:
+def read_json(path: str | Path, default: dict[str, Any] | None = None) -> dict[str, Any]:
     """Read JSON object; return provided default if file does not exist."""
     file_path = Path(path)
     if not file_path.exists():
@@ -71,7 +70,7 @@ def read_json(path: str, default: dict[str, Any] | None = None) -> dict[str, Any
     return parsed
 
 
-def atomic_rewrite_jsonl(path: str, records: list[dict[str, Any]]) -> None:
+def atomic_rewrite_jsonl(path: str | Path, records: list[dict[str, Any]]) -> None:
     """Atomically rewrite JSONL file with validation."""
     file_path = Path(path)
     tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
@@ -89,7 +88,7 @@ def atomic_rewrite_jsonl(path: str, records: list[dict[str, Any]]) -> None:
                     continue
                 json.loads(line)
 
-        os.replace(str(tmp_path), str(file_path))
+        tmp_path.replace(file_path)
     except (OSError, json.JSONDecodeError) as exc:
         _safe_remove(tmp_path)
         raise LedgerIOError(
@@ -98,7 +97,7 @@ def atomic_rewrite_jsonl(path: str, records: list[dict[str, Any]]) -> None:
         ) from exc
 
 
-def atomic_rewrite_json(path: str, data: dict[str, Any]) -> None:
+def atomic_rewrite_json(path: str | Path, data: dict[str, Any]) -> None:
     """Atomically rewrite JSON file with validation."""
     file_path = Path(path)
     tmp_path = file_path.with_suffix(file_path.suffix + ".tmp")
@@ -113,7 +112,7 @@ def atomic_rewrite_json(path: str, data: dict[str, Any]) -> None:
         with tmp_path.open("r", encoding="utf-8") as handle:
             json.load(handle)
 
-        os.replace(str(tmp_path), str(file_path))
+        tmp_path.replace(file_path)
     except (OSError, json.JSONDecodeError) as exc:
         _safe_remove(tmp_path)
         raise LedgerIOError(

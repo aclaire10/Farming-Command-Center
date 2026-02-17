@@ -2,26 +2,22 @@
 
 from __future__ import annotations
 
-import os
 from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
 from farm_tagger import load_farms
 from ledger import LedgerIOError, read_jsonl
+from paths import FARMS_CONFIG_PATH, QUEUE_PATH, LEDGER_PATH, ensure_data_dirs
 
 
 def main() -> None:
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    outputs_dir = os.path.join(script_dir, "outputs")
-    transactions_path = os.path.join(outputs_dir, "transactions.jsonl")
-    queue_path = os.path.join(outputs_dir, "manual_review_queue.jsonl")
-    farms_path = os.path.join(script_dir, "config", "farms.json")
+    ensure_data_dirs()
 
     try:
-        transactions = read_jsonl(transactions_path)
-        queue_rows = read_jsonl(queue_path)
-        farms_config = load_farms(farms_path)
+        transactions = read_jsonl(LEDGER_PATH)
+        queue_rows = read_jsonl(QUEUE_PATH)
+        farms_config = load_farms(FARMS_CONFIG_PATH)
     except (LedgerIOError, FileNotFoundError, ValueError) as exc:
         print(f"Dashboard initialization failed: {exc}")
         return
