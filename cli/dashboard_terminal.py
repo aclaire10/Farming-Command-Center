@@ -42,33 +42,44 @@ def show_farm_totals() -> None:
         SELECT
           t.farm_key,
           f.display_name AS farm_name,
-          SUM(CASE WHEN t.status IN ('auto','manual') THEN t.total_cents ELSE 0 END) AS confirmed_cents,
-          SUM(CASE WHEN t.status = 'pending_manual' THEN t.total_cents ELSE 0 END) AS pending_cents,
+          SUM(t.total_cents) AS total_cents,
           COUNT(*) AS txn_count
         FROM transactions t
         LEFT JOIN farms f ON t.farm_key = f.farm_key
         WHERE t.duplicate_detected = 0
-          AND t.status != 'failed'
+          AND t.status IN ('auto', 'manual')
         GROUP BY t.farm_key, f.display_name
-        ORDER BY confirmed_cents DESC
+        ORDER BY total_cents DESC
         """
     )
 
+    manual_row = fetchone(
+        """
+        SELECT COALESCE(SUM(total_cents), 0) AS total_cents, COUNT(*) AS n
+        FROM transactions
+        WHERE duplicate_detected = 0 AND status = 'pending_manual'
+        """
+    )
+    manual_cents = int((manual_row or {}).get("total_cents") or 0)
+    manual_n = int((manual_row or {}).get("n") or 0)
+
     print("\nFarm Totals (excluding duplicates)")
     print("=====================================")
-    print(f"{'Farm':<22}{'Confirmed':>14}{'Pending':>12}")
+    print(f"{'Farm':<22}{'Total':>14}")
     total_confirmed = 0.0
-    total_pending = 0.0
     for row in rows:
         farm_id = str(row.get("farm_key") or "unknown")
         display_name = str(row.get("farm_name") or farm_id)
-        confirmed = cents_to_dollars(row.get("confirmed_cents"))
-        pending = cents_to_dollars(row.get("pending_cents"))
-        total_confirmed += confirmed
-        total_pending += pending
-        print(f"{display_name[:20]:<22}{money(confirmed):>14}{money(pending):>12}")
+        amount = cents_to_dollars(row.get("total_cents"))
+        total_confirmed += amount
+        print(f"{display_name[:20]:<22}{money(amount):>14}")
     print("=====================================")
-    print(f"{'Total':<22}{money(total_confirmed):>14}{money(total_pending):>12}")
+    print(f"{'Total':<22}{money(total_confirmed):>14}")
+
+    if manual_n > 0:
+        print("-------------------------------------")
+        print(f"{'Manual review (unattributed)':<22}{money(cents_to_dollars(manual_cents)):>14}  ({manual_n} items)")
+        print("\nTotals above exclude amounts in manual review until you assign them to a farm.")
 
 
 def show_farm_detail() -> None:
@@ -84,7 +95,7 @@ def show_farm_detail() -> None:
         JOIN documents d ON t.doc_id = d.doc_id
         WHERE t.farm_key = ?
           AND t.duplicate_detected = 0
-          AND t.status != 'failed'
+          AND t.status IN ('auto', 'manual')
         ORDER BY (t.invoice_date IS NULL) ASC, t.invoice_date DESC
         LIMIT 50
         """,
@@ -123,7 +134,7 @@ def show_vendor_totals_for_farm(
         FROM transactions t
         WHERE t.farm_key = ?
           AND t.duplicate_detected = 0
-          AND t.status != 'failed'
+          AND t.status IN ('auto', 'manual')
         GROUP BY COALESCE(NULLIF(t.vendor_name, ''), t.vendor_key, 'Unknown Vendor')
         ORDER BY total_cents DESC
         """,

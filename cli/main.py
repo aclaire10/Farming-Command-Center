@@ -708,6 +708,8 @@ def process_single_invoice(
             vendor_key=vendor_key,
             error=parse_error,
         )
+        record["farm_id"] = None
+        record["farm_name"] = None
         insert_transaction_record(record, status="pending_manual", error_reason=parse_error)
         insert_transaction_line_items(doc_id, record.get("line_items") or [])
         if not silent:
