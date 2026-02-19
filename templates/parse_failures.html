@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Parse Failures — Farm Expense Command Center{% endblock %}
+{% block content %}
+<p class="back"><a href="/">← Dashboard</a></p>
+<h1>Parse Failures</h1>
+
+<section class="summary-cards">
+  {% for row in summary %}
+  <div class="card">
+    <span class="card-label">{{ row.parse_status or 'null' }} / {{ row.parse_failure_reason or '—' }}</span>
+    <span class="card-value">{{ row.cnt }}</span>
+  </div>
+  {% else %}
+  <p class="empty">No parse failure groups.</p>
+  {% endfor %}
+</section>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Doc ID</th>
+      <th>File</th>
+      <th>Vendor</th>
+      <th>Date</th>
+      <th class="num">Amount</th>
+      <th>Parse status</th>
+      <th>Reason</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in transactions %}
+    <tr>
+      <td>{{ t.id }}</td>
+      <td>{{ t.doc_id }}</td>
+      <td>{{ t.file_name or '—' }}</td>
+      <td>{{ t.vendor_name or '—' }}</td>
+      <td>{{ t.invoice_date or '—' }}</td>
+      <td class="num">{{ money(t.total_cents) }}</td>
+      <td><span class="parse-status parse-{{ t.parse_status }}">{{ t.parse_status or '—' }}</span></td>
+      <td>{{ t.parse_failure_reason or '—' }}</td>
+      <td><a href="/transactions/{{ t.id }}">Detail</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9">No parse failure transactions.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

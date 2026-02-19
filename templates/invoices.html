@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Invoices — Farm Expense Command Center{% endblock %}
+{% block content %}
+<h1>Invoices</h1>
+<p>Upload PDFs, then run OCR and ingestion. New items appear in <a href="/transactions">Transactions</a> or <a href="/manual-review">Manual Review</a>.</p>
+
+{% if uploaded %}
+<p class="msg success">Uploaded: <strong>{{ uploaded }}</strong></p>
+{% endif %}
+{% if processed %}
+<p class="msg success">Processed: <strong>{{ processed }}</strong> — status: <code>{{ process_status }}</code></p>
+{% endif %}
+{% if batch %}
+<p class="msg success">Batch complete. Total: {{ batch_total }}, Auto: {{ batch_auto }}, Manual review: {{ batch_manual }}, Failed: {{ batch_failed }}</p>
+{% endif %}
+
+<section class="upload-section">
+  <h2>Upload PDF</h2>
+  <form method="post" action="/invoices/upload" enctype="multipart/form-data">
+    <input type="file" name="file" accept=".pdf" required>
+    <button type="submit">Upload</button>
+  </form>
+</section>
+
+<section class="process-section">
+  <h2>Process invoices</h2>
+  <p>OCR and parse PDFs, then add to expenses (auto or manual review).</p>
+  {% if pdfs %}
+  <form method="post" action="/invoices/process" class="process-one">
+    <label>Process one file:
+      <select name="filename" required>
+        <option value="">Select PDF</option>
+        {% for f in pdfs %}
+        <option value="{{ f }}">{{ f }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Process this file</button>
+  </form>
+  <form method="post" action="/invoices/process-all" class="process-all">
+    <button type="submit">Process all {{ pdfs|length }} file(s)</button>
+  </form>
+  {% else %}
+  <p class="empty">No PDFs in the invoices folder. Upload a file above first.</p>
+  {% endif %}
+</section>
+
+<section class="flow-hint">
+  <h2>Flow</h2>
+  <ol>
+    <li>Upload one or more PDFs above.</li>
+    <li>Process one file or Process all. Each file is OCR’d, parsed, and tagged to a farm (or queued for manual review).</li>
+    <li>Check <a href="/manual-review">Manual Review</a> for items that need a farm; assign and optionally create a reinforcement rule.</li>
+    <li>View <a href="/transactions">Transactions</a> and <a href="/">Dashboard</a> for totals.</li>
+  </ol>
+</section>
+{% endblock %}

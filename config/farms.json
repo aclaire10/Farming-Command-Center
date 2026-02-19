@@ -2,7 +2,7 @@
   "baseline_157": {
     "farm_id": "baseline_157",
     "source_sheet": "Baseline 157",
-    "name": "Baseline 157 LLC - Elverta, CA 155 ACRES",
+    "name": "Baseline 157",
     "address": null,
     "apns": [
       "019-300-001-000",
@@ -107,7 +107,7 @@
   "ceres_orchards": {
     "farm_id": "ceres_orchards",
     "source_sheet": "Ceres Orchards",
-    "name": "2022 CERES ORCHARD EXPENSES",
+    "name": "Ceres Orchards",
     "address": null,
     "apns": [],
     "acres": null,
@@ -371,7 +371,7 @@
   "davis_pistachio": {
     "farm_id": "davis_pistachio",
     "source_sheet": "Davis Pistachio",
-    "name": "2022 PISTACHIO ORCHARD EXPENSES - DAVIS, CA 437 ACRES (Prep land May - July, Planting: October 2021)",
+    "name": "Davis",
     "address": null,
     "apns": [],
     "acres": 437.0,
@@ -1306,7 +1306,7 @@
   "ensenada": {
     "farm_id": "ensenada",
     "source_sheet": "Ensenada",
-    "name": "ENSENDADA RANCH EXPENSES 2017",
+    "name": "Ensenada",
     "address": null,
     "apns": [],
     "acres": null,
@@ -3219,7 +3219,7 @@
   "feather_river": {
     "farm_id": "feather_river",
     "source_sheet": "Feather River",
-    "name": "TONY/ROOP 180 ACRES (Farming 157 ac) PISTACHIO ORCHARD EXPENSES - NICOLAUS, CA (2021): PARTNERSHIP ENDED 12/2023",
+    "name": "Nicolaus - Feather River",
     "address": null,
     "apns": [],
     "acres": 180.0,
@@ -4091,7 +4091,7 @@
   "gopure": {
     "farm_id": "gopure",
     "source_sheet": "GoPure",
-    "name": "PLACER RANCH GOPURE FARMS EXPENSES 2019",
+    "name": "GoPure",
     "address": null,
     "apns": [],
     "acres": null,
@@ -9199,7 +9199,7 @@
   "hillview": {
     "farm_id": "hillview",
     "source_sheet": "Hillview",
-    "name": "HILLVIEW ALMOND RANCH\n\nExpenses",
+    "name": "Oakdale - Hillview",
     "address": "15998 Sonora Road Oakdale Ca 95361",
     "apns": [],
     "acres": 192.91,
@@ -9783,7 +9783,7 @@
   "pch": {
     "farm_id": "pch",
     "source_sheet": "PCH",
-    "name": "PCH PROPERTIES LLC EXPENSES (76 ACRES)",
+    "name": "PCH",
     "address": null,
     "apns": [],
     "acres": 76.0,
@@ -11177,7 +11177,7 @@
   "pchs": {
     "farm_id": "pchs",
     "source_sheet": "PCHS",
-    "name": "PCHS Investments LLC - MARYSVILLE, CA 107 ACRES",
+    "name": "PCHS Investments",
     "address": null,
     "apns": [
       "019-300-001-000",

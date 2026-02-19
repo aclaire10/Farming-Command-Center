@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Transaction {{ tx.id }} — Farm Expense Command Center{% endblock %}
+{% block content %}
+<p class="back"><a href="/transactions">← Transactions</a></p>
+<h1>Transaction {{ tx.id }}</h1>
+
+<table class="table detail-table">
+  <tbody>
+    <tr><th>Doc ID</th><td>{{ tx.doc_id }}</td></tr>
+    <tr><th>File</th><td>{{ tx.file_name or '—' }}</td></tr>
+    <tr><th>Farm</th><td>{{ tx.farm_name or tx.farm_key or '—' }}</td></tr>
+    <tr><th>Vendor</th><td>{{ tx.vendor_name or tx.vendor_key or '—' }}</td></tr>
+    <tr><th>Invoice #</th><td>{{ tx.invoice_number or '—' }}</td></tr>
+    <tr><th>Invoice date</th><td>{{ tx.invoice_date or '—' }}</td></tr>
+    <tr><th>Due date</th><td>{{ tx.due_date or '—' }}</td></tr>
+    <tr><th>Total</th><td class="num">{{ cents_to_dollars(tx.total_cents) }}</td></tr>
+    <tr><th>Confidence</th><td>{{ tx.confidence }}</td></tr>
+    <tr><th>Status</th><td><span class="status status-{{ tx.status }}">{{ tx.status }}</span></td></tr>
+    <tr><th>Parse status</th><td><span class="parse-status parse-{{ tx.parse_status }}">{{ tx.parse_status or '—' }}</span></td></tr>
+    {% if tx.parse_failure_reason %}<tr><th>Parse failure reason</th><td>{{ tx.parse_failure_reason }}</td></tr>{% endif %}
+    <tr><th>Service address</th><td>{{ tx.service_address or '—' }}</td></tr>
+    <tr><th>Account #</th><td>{{ tx.account_number or '—' }}</td></tr>
+    <tr><th>Processed at</th><td>{{ tx.processed_at or '—' }}</td></tr>
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Farm Expense Command Center{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<section class="summary-cards">
+  <div class="card">
+    <span class="card-label">Confirmed (auto + manual)</span>
+    <span class="card-value">{{ money(summary.confirmed_cents) }}</span>
+    <span class="card-meta">{{ summary.confirmed_count }} transactions</span>
+  </div>
+  <div class="card">
+    <span class="card-label">Pending manual</span>
+    <span class="card-value">{{ money(summary.pending_manual_cents) }}</span>
+    <span class="card-meta">{{ summary.pending_manual_count }} items</span>
+  </div>
+  <div class="card">
+    <span class="card-label">Parse failures</span>
+    <span class="card-value">{{ summary.parse_failure_count }}</span>
+    <span class="card-meta"><a href="/parse-failures">View</a></span>
+  </div>
+</section>
+
+<section class="farm-totals">
+  <h2>Farm totals</h2>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Farm</th>
+        <th class="num">Total</th>
+        <th class="num">Count</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in farm_totals %}
+      <tr>
+        <td><a href="/farm/{{ row.farm_key }}">{{ row.farm_name or row.farm_key }}</a></td>
+        <td class="num">{{ money(row.total_cents) }}</td>
+        <td class="num">{{ row.txn_count }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3">No farm totals.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

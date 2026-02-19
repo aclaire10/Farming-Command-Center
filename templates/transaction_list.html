@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Transactions — Farm Expense Command Center{% endblock %}
+{% block content %}
+<h1>Transactions</h1>
+
+<form class="filters" method="get" action="/transactions" id="tx-filters">
+  <label>Farm <select name="farm_key" id="farm_key">
+    <option value="">All</option>
+    {% for f in farms %}
+    <option value="{{ f.farm_key }}" {% if selected_farm_key == f.farm_key %}selected{% endif %}>{{ f.display_name or f.farm_key }}</option>
+    {% endfor %}
+  </select></label>
+  <label>Status <select name="status" id="status">
+    <option value="">All</option>
+    <option value="auto" {% if selected_status == 'auto' %}selected{% endif %}>auto</option>
+    <option value="manual" {% if selected_status == 'manual' %}selected{% endif %}>manual</option>
+    <option value="pending_manual" {% if selected_status == 'pending_manual' %}selected{% endif %}>pending_manual</option>
+    <option value="duplicate" {% if selected_status == 'duplicate' %}selected{% endif %}>duplicate</option>
+    <option value="failed" {% if selected_status == 'failed' %}selected{% endif %}>failed</option>
+  </select></label>
+  <label>Limit <input type="number" name="limit" value="{{ limit }}" min="1" max="500"></label>
+  <button type="submit">Apply</button>
+</form>
+<script>
+  document.getElementById('farm_key').addEventListener('change', function() { document.getElementById('tx-filters').submit(); });
+  document.getElementById('status').addEventListener('change', function() { document.getElementById('tx-filters').submit(); });
+</script>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Date</th>
+      <th>Farm</th>
+      <th>Vendor</th>
+      <th class="num">Amount</th>
+      <th>Status</th>
+      <th>Parse</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in transactions %}
+    <tr>
+      <td>{{ t.id }}</td>
+      <td>{{ t.invoice_date or '—' }}</td>
+      <td>{{ t.farm_name or t.farm_key or '—' }}</td>
+      <td>{{ t.vendor_name or t.vendor_key or '—' }}</td>
+      <td class="num">{{ cents_to_dollars(t.total_cents) }}</td>
+      <td><span class="status status-{{ t.status }}">{{ t.status }}</span></td>
+      <td><span class="parse-status parse-{{ t.parse_status }}">{{ t.parse_status or '—' }}</span></td>
+      <td><a href="/transactions/{{ t.id }}">Detail</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8">No transactions.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

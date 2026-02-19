@@ -3,12 +3,18 @@
   "rules": [
     {
       "type": "bill_to_contains_all",
-      "tokens": ["davis", "pistachio"],
+      "tokens": [
+        "davis",
+        "pistachio"
+      ],
       "farm_key": "davis_pistachio"
     },
     {
       "type": "bill_to_contains_all",
-      "tokens": ["davis", "orchard"],
+      "tokens": [
+        "davis",
+        "orchard"
+      ],
       "farm_key": "davis_pistachio"
     },
     {
@@ -262,6 +268,60 @@
         "content_fingerprint": "sha256:46a67a2c1c469259",
         "invoice_key": "3h_ag_services_inc|acct:95|inv:4624"
       }
+    },
+    {
+      "type": "bill_to_contains_all",
+      "tokens": [
+        "fox",
+        "welding",
+        "box",
+        "106",
+        "newcastle",
+        "95658",
+        "0106",
+        "usa",
+        "530",
+        "713",
+        "6528",
+        "support",
+        "com",
+        "http",
+        "www",
+        "invoice",
+        "bill",
+        "simi",
+        "pumco",
+        "rentals",
+        "725",
+        "30th",
+        "street",
+        "sacramento",
+        "95816",
+        "1324",
+        "date",
+        "2025",
+        "terms",
+        "due",
+        "receipt",
+        "2026",
+        "activity",
+        "description",
+        "qty",
+        "rate",
+        "amount",
+        "fabrication",
+        "fabricate",
+        "and",
+        "install",
+        "equal",
+        "length",
+        "gates",
+        "will",
+        "made",
+        "from",
+        "round"
+      ],
+      "farm_key": "davis_pistachio"
     }
   ]
 }

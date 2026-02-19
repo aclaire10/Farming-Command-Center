@@ -2,3 +2,7 @@ pymupdf
 pymupdf4llm
 openai
 python-dotenv
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart

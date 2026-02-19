@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Manual Review — Farm Expense Command Center{% endblock %}
+{% block content %}
+<h1>Manual Review</h1>
+<p>Assign a farm to transactions with status <code>pending_manual</code>.</p>
+
+{% if not queue %}
+<p class="empty">No pending manual items.</p>
+{% else %}
+<table class="table">
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Date</th>
+      <th>Vendor</th>
+      <th class="num">Amount</th>
+      <th>Confidence</th>
+      <th>File</th>
+      <th>Override</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in queue %}
+    <tr>
+      <td><a href="/transactions/{{ t.id }}">{{ t.id }}</a></td>
+      <td>{{ t.invoice_date or '—' }}</td>
+      <td>{{ t.vendor_name or t.vendor_key or '—' }}</td>
+      <td class="num">{{ cents_to_dollars(t.total_cents) }}</td>
+      <td>{{ t.confidence }}</td>
+      <td>{{ t.file_name or t.doc_id or '—' }}</td>
+      <td>
+        <form class="inline-form" method="post" action="/manual-review/{{ t.id }}">
+          <select name="farm_key" required>
+            <option value="">Select farm</option>
+            {% for f in farms %}
+            <option value="{{ f.farm_key }}">{{ f.display_name or f.farm_key }}</option>
+            {% endfor %}
+          </select>
+          <label class="checkbox"><input type="checkbox" name="create_reinforcement_rule" value="1"> Create rule from OCR</label>
+          <button type="submit">Override</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

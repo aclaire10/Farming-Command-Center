@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ farm_name }} — Farm Detail{% endblock %}
+{% block content %}
+<p class="back"><a href="/">← Dashboard</a></p>
+<h1>{{ farm_name }}</h1>
+<p class="meta">Farm key: {{ farm_key }}</p>
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Vendor</th>
+      <th>Invoice</th>
+      <th class="num">Amount</th>
+      <th>Status</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for t in transactions %}
+    <tr>
+      <td>{{ t.invoice_date or '—' }}</td>
+      <td>{{ t.vendor_name or t.vendor_key or '—' }}</td>
+      <td>{{ t.invoice_number or '—' }}</td>
+      <td class="num">{{ cents_to_dollars(t.total_cents) }}</td>
+      <td><span class="status status-{{ t.status }}">{{ t.status }}</span></td>
+      <td><a href="/transactions/{{ t.id }}">Detail</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6">No transactions.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="total-line">Total: {{ cents_to_dollars(total_cents) }}</p>
+{% endblock %}
