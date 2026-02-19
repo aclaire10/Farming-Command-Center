@@ -20,6 +20,37 @@ def get_connection() -> sqlite3.Connection:
     return connection
 
 
+def _table_has_column(connection: sqlite3.Connection, table: str, column: str) -> bool:
+    """Check if a table has a column via PRAGMA table_info."""
+    cursor = connection.execute(f"PRAGMA table_info({table})")
+    for row in cursor.fetchall():
+        if row[1] == column:
+            return True
+    return False
+
+
+def _migrate_transactions_parse_columns(connection: sqlite3.Connection) -> None:
+    """Add parse_status and parse_failure_reason if missing (backward compatible)."""
+    if not _table_has_column(connection, "transactions", "parse_status"):
+        connection.execute(
+            "ALTER TABLE transactions ADD COLUMN parse_status TEXT NOT NULL DEFAULT 'success'"
+        )
+    if not _table_has_column(connection, "transactions", "parse_failure_reason"):
+        connection.execute(
+            "ALTER TABLE transactions ADD COLUMN parse_failure_reason TEXT"
+        )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_transactions_parse_status "
+        "ON transactions(parse_status)"
+    )
+
+
+def _migrate_documents_raw_text(connection: sqlite3.Connection) -> None:
+    """Add raw_text column if missing (backward compatible)."""
+    if not _table_has_column(connection, "documents", "raw_text"):
+        connection.execute("ALTER TABLE documents ADD COLUMN raw_text TEXT")
+
+
 def init_db() -> None:
     """Initialize schema and seed stable reference data."""
     with closing(get_connection()) as connection:
@@ -32,6 +63,9 @@ def init_db() -> None:
             schema_path = Path(__file__).resolve().parent / "schema.sql"
             schema_sql = schema_path.read_text(encoding="utf-8")
             connection.executescript(schema_sql)
+        else:
+            _migrate_transactions_parse_columns(connection)
+            _migrate_documents_raw_text(connection)
 
         _seed_farms(connection)
         connection.commit()

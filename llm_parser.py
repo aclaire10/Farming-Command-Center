@@ -9,6 +9,8 @@ from typing import Dict, Any, List
 
 import fitz  # PyMuPDF
 from openai import OpenAI
+
+from core.ocr_utils import sanitize_vision_output
 from paths import VISION_CACHE_DIR
 
 
@@ -16,16 +18,25 @@ class LLMParseError(Exception):
     """Raised when LLM parsing fails."""
 
 
-VISION_OCR_SYSTEM_PROMPT = """You are an OCR engine. Extract all visible text from the invoice images exactly as written.
+VISION_OCR_SYSTEM_PROMPT = """You are a high-precision OCR engine.
 
-Critical requirements:
-- Preserve all numbers exactly (account numbers, invoice numbers, amounts)
-- Preserve addresses and identifiers exactly
-- Maintain reasonable formatting where helpful
-- If text is unclear or unreadable, omit it rather than guess
-- Output plain text only - no markdown formatting, no explanations, no JSON
+Extract all visible text from the provided document exactly as it appears.
 
-Extract the text now:"""
+Return plain text only.
+
+Do NOT:
+- Add explanations
+- Add commentary
+- Add headings
+- Add markdown formatting
+- Add phrases like "Here is the extracted text"
+- Summarize
+- Interpret
+- Structure
+- Infer
+- Convert to JSON
+
+Return only raw extracted text."""
 
 
 STRUCTURED_PARSE_SYSTEM_PROMPT = """
@@ -101,7 +112,7 @@ def extract_invoice_text_with_vision(
             cached_text = f.read()
         if cached_text.strip():
             print("  -> Using cached vision text")
-            return cached_text
+            return sanitize_vision_output(cached_text)
 
     print("  -> Extracting with GPT-4o vision")
     client = OpenAI(api_key=api_key)
@@ -124,7 +135,8 @@ def extract_invoice_text_with_vision(
             {"role": "user", "content": content},
         ],
     )
-    vision_text = (response.choices[0].message.content or "").strip()
+    raw_text = (response.choices[0].message.content or "").strip()
+    vision_text = sanitize_vision_output(raw_text)
     if vision_text:
         with cache_path.open("w", encoding="utf-8") as f:
             f.write(vision_text)

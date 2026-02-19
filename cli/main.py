@@ -21,7 +21,13 @@ from llm_parser import (
     extract_invoice_text_with_vision,
     parse_invoice_with_llm,
 )
-from core.validator import validate_invoice
+from core.validator import (
+    PARSE_STATUS_INVALID_JSON,
+    PARSE_STATUS_SUCCESS,
+    PARSE_STATUS_VALIDATION_FAILED,
+    normalize_total_to_cents,
+    validate_invoice_payload,
+)
 from paths import (
     BASE_DIR,
     DYNAMIC_RULES_PATH,
@@ -194,6 +200,7 @@ def insert_document(
     file_path: str | None,
     content_fingerprint: str | None,
     raw_text_hash: str | None,
+    raw_text: str | None = None,
 ) -> bool:
     """Insert document and return False on content fingerprint duplicates."""
     try:
@@ -201,11 +208,11 @@ def insert_document(
             connection.execute(
                 """
                 INSERT INTO documents (
-                    doc_id, file_name, file_path, raw_text_hash, content_fingerprint, extracted_at
+                    doc_id, file_name, file_path, raw_text_hash, raw_text, content_fingerprint, extracted_at
                 )
-                VALUES (?, ?, ?, ?, ?, datetime('now'))
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
                 """,
-                (doc_id, file_name, file_path, raw_text_hash, content_fingerprint),
+                (doc_id, file_name, file_path, raw_text_hash, raw_text, content_fingerprint),
             )
             connection.commit()
         return True
@@ -342,9 +349,11 @@ def insert_transaction_record(
     duplicate_detected: bool = False,
     duplicate_reason: str | None = None,
     duplicate_of_doc_id: str | None = None,
+    parse_status: str = PARSE_STATUS_SUCCESS,
+    parse_failure_reason: str | None = None,
 ) -> None:
     """Insert transaction row from canonical record."""
-    assert set(record.keys()) == REQUIRED_TRANSACTION_KEYS, "Transaction schema violation"
+    assert set(record.keys()) >= REQUIRED_TRANSACTION_KEYS, "Transaction schema violation"
     vendor_key = record.get("vendor_key")
     vendor_name = record.get("vendor_name")
     # Ensure vendor exists before inserting transaction (required for FK integrity)
@@ -356,6 +365,11 @@ def insert_transaction_record(
             """,
             (vendor_key, vendor_name or vendor_key),
         )
+    total_cents_val = (
+        record["total_cents"]
+        if record.get("total_cents") is not None
+        else to_cents(record.get("total_amount"))
+    )
     with get_connection() as connection:
         connection.execute(
             """
@@ -364,9 +378,10 @@ def insert_transaction_record(
                 invoice_number, invoice_date, due_date, total_cents,
                 service_address, account_number, confidence, needs_manual_review,
                 manual_override, processed_at, status, error_reason, content_fingerprint,
-                invoice_key, duplicate_detected, duplicate_reason, duplicate_of_doc_id, updated_at
+                invoice_key, duplicate_detected, duplicate_reason, duplicate_of_doc_id,
+                parse_status, parse_failure_reason, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             """,
             (
                 record.get("doc_id"),
@@ -377,7 +392,7 @@ def insert_transaction_record(
                 record.get("invoice_number"),
                 normalize_date_iso(record.get("invoice_date")),
                 normalize_date_iso(record.get("due_date")),
-                to_cents(record.get("total_amount")),
+                total_cents_val,
                 record.get("service_address"),
                 record.get("account_number"),
                 float(record.get("confidence") or 0.0),
@@ -391,6 +406,8 @@ def insert_transaction_record(
                 1 if duplicate_detected else 0,
                 duplicate_reason,
                 duplicate_of_doc_id,
+                parse_status,
+                parse_failure_reason,
             ),
         )
         connection.commit()
@@ -652,6 +669,7 @@ def process_single_invoice(
         file_path=str(pdf_path),
         content_fingerprint=content_fingerprint,
         raw_text_hash=hash_text(vision_text),
+        raw_text=vision_text,
     ):
         if not silent:
             print("status=skipped_duplicate reason=content_fingerprint")
@@ -678,16 +696,26 @@ def process_single_invoice(
     append_tag_audit(doc_id, pdf_path, tag_result)
 
     invoice_data = None
-    parse_error = None
+    parse_error_msg: str | None = None
+    parse_status_val = PARSE_STATUS_SUCCESS
+    parse_failure_reason_val: str | None = None
+
     try:
         invoice_data = parse_invoice_with_llm(vision_text, api_key)
-        validate_invoice(invoice_data)
     except LLMParseError as e:
         _print_debug_exception("llm_parsing_failed", e, doc_id, verbose)
-        parse_error = f"llm_parsing_failed: {e}"
-    except ValueError as e:
-        _print_debug_exception("validation_failed", e, doc_id, verbose)
-        parse_error = f"validation_failed: {e}"
+        parse_error_msg = f"llm_parsing_failed: {e}"
+        parse_status_val = PARSE_STATUS_INVALID_JSON
+        parse_failure_reason_val = PARSE_STATUS_INVALID_JSON
+        invoice_data = None
+
+    if invoice_data is not None:
+        valid, failure_reason = validate_invoice_payload(invoice_data)
+        if not valid:
+            parse_error_msg = f"validation_failed: {failure_reason}"
+            parse_status_val = PARSE_STATUS_VALIDATION_FAILED
+            parse_failure_reason_val = failure_reason or PARSE_STATUS_VALIDATION_FAILED
+            invoice_data = None
 
     vendor_key = None
     if invoice_data and tag_result.top_candidate:
@@ -696,6 +724,30 @@ def process_single_invoice(
             invoice_data.get("vendor_name"),
             farms_config,
         )
+
+    if parse_error_msg is not None:
+        record = create_transaction_record(
+            doc_id=doc_id,
+            vision_text=vision_text,
+            content_fingerprint=content_fingerprint,
+            farm_tag_result=tag_result,
+            parsed_invoice=None,
+            vendor_key=None,
+            error=parse_error_msg,
+        )
+        record["farm_id"] = None
+        record["farm_name"] = None
+        insert_transaction_record(
+            record,
+            status="failed",
+            error_reason=parse_error_msg,
+            parse_status=parse_status_val,
+            parse_failure_reason=parse_failure_reason_val,
+        )
+        if not silent:
+            print(f"status=failed confidence={tag_result.confidence:.2f} farm=None")
+        reason = "llm_parsing_failed" if parse_status_val == PARSE_STATUS_INVALID_JSON else "validation_failed"
+        return {"status": "failed", "reason": reason, "confidence": tag_result.confidence}
 
     if tag_result.needs_manual_review or tag_result.confidence < 0.85:
         append_manual_review_queue(doc_id, vision_text, tag_result)
@@ -706,32 +758,21 @@ def process_single_invoice(
             farm_tag_result=tag_result,
             parsed_invoice=invoice_data,
             vendor_key=vendor_key,
-            error=parse_error,
         )
         record["farm_id"] = None
         record["farm_name"] = None
-        insert_transaction_record(record, status="pending_manual", error_reason=parse_error)
+        record["total_cents"] = normalize_total_to_cents(invoice_data["total_amount"])
+        insert_transaction_record(
+            record,
+            status="pending_manual",
+            parse_status=PARSE_STATUS_SUCCESS,
+            parse_failure_reason=None,
+        )
         insert_transaction_line_items(doc_id, record.get("line_items") or [])
         if not silent:
             farm_label = (tag_result.top_candidate.farm_id or "None").upper() if tag_result.top_candidate else "None"
             print(f"status=manual confidence={tag_result.confidence:.2f} farm={farm_label}")
         return {"status": "manual_review", "confidence": tag_result.confidence, "reason": tag_result.reason}
-
-    if parse_error:
-        record = create_transaction_record(
-            doc_id=doc_id,
-            vision_text=vision_text,
-            content_fingerprint=content_fingerprint,
-            farm_tag_result=tag_result,
-            parsed_invoice=None,
-            vendor_key=None,
-            error=parse_error,
-        )
-        insert_transaction_record(record, status="failed", error_reason=parse_error)
-        if not silent:
-            print(f"status=failed confidence={tag_result.confidence:.2f} farm=None")
-        reason = "llm_parsing_failed" if parse_error.startswith("llm_parsing_failed") else "validation_failed"
-        return {"status": "failed", "reason": reason, "confidence": tag_result.confidence}
 
     invoice_key = compute_invoice_key(vendor_key, invoice_data)
     record = create_transaction_record(
@@ -742,8 +783,14 @@ def process_single_invoice(
         parsed_invoice=invoice_data,
         vendor_key=vendor_key,
     )
+    record["total_cents"] = normalize_total_to_cents(invoice_data["total_amount"])
     try:
-        insert_transaction_record(record, status="auto")
+        insert_transaction_record(
+            record,
+            status="auto",
+            parse_status=PARSE_STATUS_SUCCESS,
+            parse_failure_reason=None,
+        )
     except sqlite3.IntegrityError as exc:
         message = str(exc)
         if "idx_transactions_invoice_key_original" not in message and "transactions.invoice_key" not in message:

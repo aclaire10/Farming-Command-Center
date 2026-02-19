@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS documents (
     file_name TEXT NOT NULL,
     file_path TEXT,
     raw_text_hash TEXT,
+    raw_text TEXT,
     content_fingerprint TEXT UNIQUE,
     extracted_at TEXT NOT NULL DEFAULT (datetime('now')),
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -48,6 +49,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     duplicate_detected INTEGER NOT NULL DEFAULT 0 CHECK (duplicate_detected IN (0, 1)),
     duplicate_reason TEXT,
     duplicate_of_doc_id TEXT,
+    parse_status TEXT NOT NULL DEFAULT 'success',
+    parse_failure_reason TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (doc_id) REFERENCES documents(doc_id),
@@ -59,6 +62,18 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_invoice_key_original
 ON transactions(invoice_key)
 WHERE duplicate_detected = 0 AND invoice_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_transactions_status
+ON transactions(status);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_farm
+ON transactions(farm_key);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_duplicate
+ON transactions(duplicate_detected);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_parse_status
+ON transactions(parse_status);
 
 CREATE TABLE IF NOT EXISTS transaction_line_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

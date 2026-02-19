@@ -2,6 +2,96 @@
   "version": "1.0",
   "rules": [
     {
+      "type": "bill_to_contains_all",
+      "tokens": ["davis", "pistachio"],
+      "farm_key": "davis_pistachio"
+    },
+    {
+      "type": "bill_to_contains_all",
+      "tokens": ["davis", "orchard"],
+      "farm_key": "davis_pistachio"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Nicolaus Orchard",
+      "farm_key": "feather_river"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "PCHS Investments LLC",
+      "farm_key": "pchs"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "PCH Properties LLC",
+      "farm_key": "pch"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Hillview Orchard Holdings LLC",
+      "farm_key": "hillview"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Davis Orchards Pistachios",
+      "farm_key": "davis_pistachio"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "GoPure Farms",
+      "farm_key": "gopure"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Baseline 157 LLC",
+      "farm_key": "baseline_157"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Ensenada Apartments",
+      "farm_key": "ensenada"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Ensenada Apartments LLC",
+      "farm_key": "ensenada"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Hillview Orchard",
+      "farm_key": "hillview"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Baseline 157",
+      "farm_key": "baseline_157"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Ceres Orchards",
+      "farm_key": "ceres_orchards"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Feather River",
+      "farm_key": "feather_river"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "Nicolaus",
+      "farm_key": "feather_river"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "GoPure Farms LLC",
+      "farm_key": "gopure"
+    },
+    {
+      "type": "bill_to_match",
+      "match_text": "PCHS Investments",
+      "farm_key": "pchs"
+    },
+    {
       "rule_id": "rule_75034cff9935",
       "vendor_key": "pgande",
       "account_number": "1642791479-7",
@@ -36,6 +126,141 @@
         "doc_id": "PGE_sample_invoice_7-7-25.pdf",
         "content_fingerprint": "sha256:6f88b2a6463f06ec",
         "invoice_key": "pgande|acct:16427914797|date:07/07/2025|amt_cents:605743"
+      }
+    },
+    {
+      "rule_id": "rule_f1b5692361cd",
+      "vendor_key": "pgande",
+      "account_number": "1592357606",
+      "invoice_number": "987644",
+      "service_address_contains": [
+        "p.o. box 254487",
+        "sacramento"
+      ],
+      "keywords_any": [],
+      "farm_id": "pchs",
+      "priority": 100,
+      "created_at": "2026-02-18T05:48:38.772547+00:00",
+      "evidence": {
+        "doc_id": "a40330a7-18d5-4e0a-a687-d641e17ab7cd",
+        "content_fingerprint": "sha256:0565ff5cb34f9557",
+        "invoice_key": null
+      }
+    },
+    {
+      "rule_id": "rule_1e2647fc96cf",
+      "vendor_key": "pgande",
+      "account_number": "1592357606",
+      "invoice_number": "987644",
+      "service_address_contains": [],
+      "keywords_any": [
+        "pchs",
+        "investments",
+        "acres"
+      ],
+      "farm_id": "pchs",
+      "priority": 100,
+      "created_at": "2026-02-18T05:48:38.772547+00:00",
+      "evidence": {
+        "doc_id": "a40330a7-18d5-4e0a-a687-d641e17ab7cd",
+        "content_fingerprint": "sha256:0565ff5cb34f9557",
+        "invoice_key": null
+      }
+    },
+    {
+      "rule_id": "rule_1cbb926843d4",
+      "vendor_key": "renu_biome",
+      "account_number": "726225391",
+      "invoice_number": "35",
+      "service_address_contains": [],
+      "keywords_any": [
+        "baseline",
+        "acres"
+      ],
+      "farm_id": "baseline_157",
+      "priority": 100,
+      "created_at": "2026-02-18T05:49:33.453542+00:00",
+      "evidence": {
+        "doc_id": "34a5e90d-d317-4de6-9c04-b4ebb134c22e",
+        "content_fingerprint": "sha256:4e64d383dbcf8446",
+        "invoice_key": null
+      }
+    },
+    {
+      "rule_id": "rule_dbdc1300c508",
+      "vendor_key": "renu_biome",
+      "account_number": "726225391",
+      "invoice_number": "31",
+      "service_address_contains": [],
+      "keywords_any": [
+        "2017",
+        "ensenada"
+      ],
+      "farm_id": "ensenada",
+      "priority": 100,
+      "created_at": "2026-02-18T05:50:36.709487+00:00",
+      "evidence": {
+        "doc_id": "ed26149b-ed45-4636-892b-6bddcb1bae11",
+        "content_fingerprint": "sha256:c2016736dd2c3e41",
+        "invoice_key": null
+      }
+    },
+    {
+      "rule_id": "rule_4efda7afa0bc",
+      "vendor_key": "deposit",
+      "account_number": "726225391",
+      "invoice_number": "33",
+      "service_address_contains": [],
+      "keywords_any": [
+        "hillview",
+        "almond"
+      ],
+      "farm_id": "hillview",
+      "priority": 100,
+      "created_at": "2026-02-18T05:51:08.188974+00:00",
+      "evidence": {
+        "doc_id": "fa677813-ccf2-4016-b79b-3ccbf2af0c44",
+        "content_fingerprint": "sha256:031b94ee175b37d3",
+        "invoice_key": null
+      }
+    },
+    {
+      "rule_id": "rule_a4793fc0e3b9",
+      "vendor_key": "3h_ag_services_inc",
+      "account_number": "95",
+      "invoice_number": "4624",
+      "service_address_contains": [
+        "14262 rd 23 1/2",
+        "madera"
+      ],
+      "keywords_any": [],
+      "farm_id": "davis_pistachio",
+      "priority": 100,
+      "created_at": "2026-02-18T05:51:18.271871+00:00",
+      "evidence": {
+        "doc_id": "aaaeaf10-4076-4f33-b7c1-b6c7365d71b8",
+        "content_fingerprint": "sha256:46a67a2c1c469259",
+        "invoice_key": "3h_ag_services_inc|acct:95|inv:4624"
+      }
+    },
+    {
+      "rule_id": "rule_17adbf0ccfaa",
+      "vendor_key": "3h_ag_services_inc",
+      "account_number": "95",
+      "invoice_number": "4624",
+      "service_address_contains": [],
+      "keywords_any": [
+        "pistachio",
+        "davis",
+        "land"
+      ],
+      "farm_id": "davis_pistachio",
+      "priority": 100,
+      "created_at": "2026-02-18T05:51:18.271871+00:00",
+      "evidence": {
+        "doc_id": "aaaeaf10-4076-4f33-b7c1-b6c7365d71b8",
+        "content_fingerprint": "sha256:46a67a2c1c469259",
+        "invoice_key": "3h_ag_services_inc|acct:95|inv:4624"
       }
     }
   ]

@@ -13,6 +13,9 @@ from core.ledger import atomic_rewrite_json, read_json
 
 DEFAULT_DYNAMIC_RULES = {"version": "1.0", "rules": []}
 
+BILL_TO_CONTAINS_ALL = "bill_to_contains_all"
+BILL_TO_MATCH = "bill_to_match"
+
 
 def normalize_text(value: str | None) -> str:
     """Lowercase and normalize whitespace."""
@@ -131,9 +134,15 @@ def apply_dynamic_rules(
     farms_config: dict[str, Any],
 ) -> TagResult | None:
     """
-    Match dynamic rules against OCR text before fallback tagger.
+    Deterministic farm attribution pipeline.
 
-    Rules are sorted by priority descending then rule_id ascending.
+    Precedence order:
+    1. bill_to_contains_all (token-based)
+    2. bill_to_match (exact substring)
+    3. Account number rule
+    4. Service address rule
+    5. Reinforcement rules
+    6. Vendor rule (fallback only, confidence 0.70)
     """
     if not rules:
         return None
@@ -142,16 +151,75 @@ def apply_dynamic_rules(
     document_identifier = normalize_identifier(vision_text)
     farms_by_id = _build_farm_lookup(farms_config)
 
-    ordered = sorted(
-        [r for r in rules if isinstance(r, dict)],
-        key=lambda r: (-int(r.get("priority", 100)), str(r.get("rule_id", ""))),
-    )
+    bill_to_contains_all_rules = [
+        r for r in rules if isinstance(r, dict) and r.get("type") == BILL_TO_CONTAINS_ALL
+    ]
+    for rule in bill_to_contains_all_rules:
+        tokens = rule.get("tokens") or []
+        if not tokens:
+            continue
+        if all(str(t).strip().lower() in document_lower for t in tokens if t):
+            farm_id = str(rule.get("farm_key") or rule.get("farm_id") or "").strip()
+            if not farm_id:
+                continue
+            farm_name = farms_by_id.get(farm_id, {}).get("name") or farm_id
+            candidate = TagCandidate(
+                farm_id=farm_id,
+                farm_name=farm_name,
+                score=0.99,
+                matched_rules=[BILL_TO_CONTAINS_ALL],
+            )
+            return TagResult(
+                top_candidate=candidate,
+                all_candidates=[candidate],
+                confidence=0.99,
+                needs_manual_review=False,
+                reason=f"Bill-to contains all: {tokens}",
+            )
+
+    bill_to_rules = [r for r in rules if isinstance(r, dict) and r.get("type") == BILL_TO_MATCH]
+    for rule in bill_to_rules:
+        match_text = str(rule.get("match_text") or "").strip()
+        if not match_text:
+            continue
+        needle = normalize_text(match_text)
+        if needle and needle in document_lower:
+            farm_id = str(rule.get("farm_key") or rule.get("farm_id") or "").strip()
+            if not farm_id:
+                continue
+            farm_name = farms_by_id.get(farm_id, {}).get("name") or farm_id
+            candidate = TagCandidate(
+                farm_id=farm_id,
+                farm_name=farm_name,
+                score=0.99,
+                matched_rules=[BILL_TO_MATCH],
+            )
+            return TagResult(
+                top_candidate=candidate,
+                all_candidates=[candidate],
+                confidence=0.99,
+                needs_manual_review=False,
+                reason=f"Bill-to match: {match_text}",
+            )
+
+    vendor_rules = [
+        r for r in rules
+        if isinstance(r, dict)
+        and r.get("type") not in (BILL_TO_CONTAINS_ALL, BILL_TO_MATCH)
+        and normalize_identifier(r.get("vendor_key"))
+        and normalize_identifier(r.get("account_number"))
+    ]
+    ordered = _order_vendor_rules(vendor_rules)
     for rule in ordered:
         if _matches_rule(rule, document_lower, document_identifier, farms_config):
             farm_id = str(rule.get("farm_id") or "").strip()
             if not farm_id:
                 continue
             farm_name = farms_by_id.get(farm_id, {}).get("name") or farm_id
+            is_vendor_fallback = not (
+                (rule.get("service_address_contains") or []) or (rule.get("keywords_any") or [])
+            )
+            confidence = 0.70 if is_vendor_fallback else 0.99
             candidate = TagCandidate(
                 farm_id=farm_id,
                 farm_name=farm_name,
@@ -161,11 +229,28 @@ def apply_dynamic_rules(
             return TagResult(
                 top_candidate=candidate,
                 all_candidates=[candidate],
-                confidence=0.99,
-                needs_manual_review=False,
+                confidence=confidence,
+                needs_manual_review=confidence < 0.85,
                 reason=f"Dynamic rule match ({rule.get('rule_id')})",
             )
     return None
+
+
+def _order_vendor_rules(rules: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Order: service_address > keywords > vendor-only; then priority desc, rule_id asc."""
+    def tier(r: dict) -> int:
+        has_svc = bool(r.get("service_address_contains"))
+        has_kw = bool(r.get("keywords_any"))
+        if has_svc:
+            return 0
+        if has_kw:
+            return 1
+        return 2
+
+    return sorted(
+        rules,
+        key=lambda r: (tier(r), -int(r.get("priority", 100)), str(r.get("rule_id", ""))),
+    )
 
 
 def check_account_collision(
